@@ -11,10 +11,14 @@ class Environment():
     Fish get their visible neighbors and corresponding relative positions and distances from here. Fish also update their own positions after moving in here. Environmental tracking data is used for simulation analysis.
     """
 
-    def __init__(self, pos, vel, arena):
+    def __init__(self, pos, vel, fish_specs, arena):
         # Arguments
         self.pos = pos # x, y, z, phi; [no_robots X 4]
         self.vel = vel # pos_dot
+        self.v_range = fish_specs[0] # visual range, [mm]
+        self.w_blindspot = fish_specs[1] # width of blindspot, [mm]
+        self.r_sphere = fish_specs[2] # radius of blocking sphere for occlusion, [mm]
+        self.n_magnitude = fish_specs[3] # visual noise magnitude, [% of distance]
         self.arena_size = arena # x, y, z
         
         # Parameters
@@ -106,12 +110,12 @@ class Environment():
         self.blind_spot(source_id, robots, rel_pos)
         self.occlusions(source_id, robots, rel_pos)
 
-        #if visual_noise: # no overwrites of self.rel_pos and self.dist
-        #    n_rel_pos, n_dist = self.visual_noise(source_id, rel_pos)
-        #    return (robots, n_rel_pos, n_dist)
+        if self.n_magnitude: # no overwrites of self.rel_pos and self.dist
+            n_rel_pos, n_dist = self.visual_noise(source_id, rel_pos)
+            return (robots, n_rel_pos, n_dist)
         return (robots, rel_pos, self.dist[source_id])
 
-    def visual_range(self, source_id, robots, v_range=3000):
+    def visual_range(self, source_id, robots):
         """Deletes fishes outside of visible range
         """
         conn_drop = 0.005
@@ -119,7 +123,7 @@ class Environment():
         candidates = robots.copy()
         for robot in candidates:
             d_robot = self.dist[source_id][robot]
-            x = conn_drop * (d_robot - v_range)
+            x = conn_drop * (d_robot - self.v_range)
             if x < -5:
                 sigmoid = 1
             elif x > 5:
@@ -131,10 +135,10 @@ class Environment():
             if  sigmoid < prob:
                 robots.remove(robot)
 
-    def blind_spot(self, source_id, robots, rel_pos, w_blindspot=50):
+    def blind_spot(self, source_id, robots, rel_pos):
         """Omits fishes within the blind spot behind own body
         """
-        r_blockage = w_blindspot/2
+        r_blockage = self.w_blindspot/2
 
         phi = self.pos[source_id,3]
         phi_xy = [math.cos(phi), math.sin(phi)]
@@ -151,7 +155,7 @@ class Environment():
                 if  math.cos(angle) * d_robot < r_blockage:
                     robots.remove(robot)
 
-    def occlusions(self, source_id, robots, rel_pos, r_sphere=50):
+    def occlusions(self, source_id, robots, rel_pos):
         """Omits invisible fishes occluded by others
         """
         if not robots:
@@ -174,7 +178,7 @@ class Environment():
                 d_verified = rel_dist[verified]
                 coord_verified = rel_pos[verified,:3]
 
-                theta_min = math.atan(r_sphere / d_verified)
+                theta_min = math.atan(self.r_sphere / d_verified)
                 theta = abs(math.acos(np.dot(coord_robot, coord_verified) / (d_robot * d_verified)))
 
                 if theta < theta_min:
@@ -190,7 +194,7 @@ class Environment():
     def visual_noise(self, source_id, rel_pos):
         """Adds visual noise
         """
-        magnitudes = 0.1 * np.array([self.dist[source_id]]).T # 10% of distance
+        magnitudes = self.m_magnitude * np.array([self.dist[source_id]]).T # 10% of distance
         noise = magnitudes * (np.random.rand(self.no_robots, self.no_states) - 0.5) # zero-mean uniform noise
         n_rel_pos = rel_pos + noise
         n_dist = np.linalg.norm(n_rel_pos[:,:3], axis=1) # new dist without phi

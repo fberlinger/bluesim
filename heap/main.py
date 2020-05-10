@@ -48,12 +48,9 @@ def exp_rv(param):
 def log_meta():
     """Logs the meta data of the experiment
     """
-    with open('./logfiles/{}_meta.csv'.format(filename), 'a') as f:
-        f.write('Experiment, {}\nNumber of fishes, {}\nSimulation time, {}\nClock frequency, {}\nArena [mm], {}'.format(experiment_type, no_fish, simulation_time, clock_freq, arena))
-
-    meta = {'Experiment': experiment_type, 'Number of fishes': no_fish, 'Simulation time [s]': simulation_time, 'Clock frequency [Hz]': clock_freq}
+    meta = {'Experiment': experiment_type, 'Number of fishes': no_fish, 'Simulation time [s]': simulation_time, 'Clock frequency [Hz]': clock_freq, 'Arena [mm]': arena_list, 'Visual range [mm]': v_range, 'Width of blindspot [mm]': w_blindspot, 'Radius of blocking sphere [mm]': r_sphere, 'Visual noise magnitude [% of distance]': n_magnitude}
     with open('./logfiles/{}_meta.txt'.format(filename), 'w') as f:
-        json.dump(meta, f)
+        json.dump(meta, f, indent=2)
 
 # Read Experiment Description
 try:
@@ -62,14 +59,24 @@ except:
     print('Please provide a description of this experiment, e.g.:\n >python main.py milling')
     sys.exit()
 
+## Feel free to loop over multiple simulations with different parameters! ##
+
 # Experimental Parameters
 no_fish = 20
 simulation_time = 10 # [s]
-clock_freq = 2
+clock_freq = 2 # [Hz]
 clock_rate = 1/clock_freq
 
+# Fish Specifications
+v_range=3000 # visual range, [mm]
+w_blindspot=50 # width of blindspot, [mm]
+r_sphere=50 # radius of blocking sphere for occlusion, [mm]
+n_magnitude=0 # visual noise magnitude, [% of distance]
+fish_specs = (v_range, w_blindspot, r_sphere, n_magnitude)
+
 # Standard Tank
-arena = np.array([1780, 1780, 1170])
+arena_list = [1780, 1780, 1170]
+arena = np.array(arena_list)
 arena_center = arena / 2.0
 
 # Standard Surface Initialization
@@ -81,7 +88,7 @@ pos[:,2] = 10 * np.random.rand(1, no_fish) # z, all fish a same noise-free depth
 pos[:,3] = math.pi * np.random.rand(1, no_fish) # phi
 
 # Create Environment, Dynamics, And Heap
-environment = Environment(pos, vel, arena)
+environment = Environment(pos, vel, fish_specs, arena)
 dynamics = Dynamics(environment, clock_freq)
 H = Heap(no_fish)
 

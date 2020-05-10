@@ -39,6 +39,7 @@ except:
 # Read Experimental Parameters
 clock_freq = meta['Clock frequency [Hz]']
 clock_rate = 1000/clock_freq # [ms]
+arena = meta['Arena [mm]']
 timesteps = data.shape[0]
 fishes = int(data.shape[1]/8)
 
@@ -68,9 +69,9 @@ colors = np.array([cm.Blues(k) for k in v])
 
 # Create Animation
 fig = ipv.figure()
-ipv.xlim(0, 1780)
-ipv.ylim(0, 1780)
-ipv.zlim(0, 1170)
+ipv.xlim(0, arena[0])
+ipv.ylim(0, arena[1])
+ipv.zlim(0, arena[2])
 ipv.style.use('dark')
 
 quiver = ipv.quiver(x, y, z, np.cos(phi), np.sin(phi), np.zeros((1,len(phi))),size=6, color=colors[:,:,:3])

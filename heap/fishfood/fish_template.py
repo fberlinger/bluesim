@@ -137,8 +137,9 @@ class Fish():
             target_pos, self_vel = self.dynamics.simulate_move(self.id)
             return (target_pos, self_vel)
 
-        centroid_pos, magnitude = self.lj_force(robots, rel_pos, dist, r_target=390)
-        move = centroid_pos
+        # Define your move here
+        move = np.zeros((3,))
+        magnitude = 1
 
         # Global to Robot Transformation
         phi = self.environment.pos[self.id,3]
