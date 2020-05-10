@@ -1,20 +1,44 @@
 #!/usr/bin/python
+"""Animates simulation data from logfiles with ipyvolume
+
+Attributes:
+    clock_freq (float): Clock frequency
+    clock_rate (float): Clock rate
+    colors (np-array of floats): Colors fish depending on their location
+    fig (figure object): ipv figure
+    fishes (int): Number of simulated fishes
+    phi (float): Orientation angles
+    quiver (plot object): ipv quiver plot
+    timesteps (TYPE): Description
+    v (float): Position magnitude
+    x (float): x-positions
+    y (float): y-positions
+    z (float): z-positions
+"""
+import json
 import numpy as np
 import ipyvolume as ipv
 import matplotlib.cm as cm
 import sys
 
-try:
-	filename = sys.argv[1]
-except:
-	print('Provide prefix of data you want to animate in format yymmdd_hhmmss as command line argument, e.g.:\n >python animation.py 201005_111211')
-	sys.exit()
-try:
-	data = np.loadtxt('./logfiles/{}_data.txt'.format(filename), delimiter=',')
-except:
-	print('Data file with prefix {} does not exist.\nProvide prefix of data you want to animate in format yymmdd_hhmmss as command line argument, e.g.:\n >python animation.py 201005_111211'.format(filename))
-	sys.exit()
 
+# Load Data
+try:
+    filename = sys.argv[1]
+except:
+    print('Provide prefix of data you want to animate in format yymmdd_hhmmss as command line argument, e.g.:\n >python animation.py 201005_111211')
+    sys.exit()
+try:
+    data = np.loadtxt('./logfiles/{}_data.txt'.format(filename), delimiter=',')
+    with open('./logfiles/{}_meta.txt'.format(filename), 'r') as f:
+        meta = json.loads(f.read())
+except:
+    print('Data file with prefix {} does not exist.\nProvide prefix of data you want to animate in format yymmdd_hhmmss as command line argument, e.g.:\n >python animation.py 201005_111211'.format(filename))
+    sys.exit()
+
+# Read Experimental Parameters
+clock_freq = meta['Clock frequency [Hz]']
+clock_rate = 1000/clock_freq # [ms]
 timesteps = data.shape[0]
 fishes = int(data.shape[1]/8)
 
@@ -50,7 +74,7 @@ ipv.zlim(0, 1170)
 ipv.style.use('dark')
 
 quiver = ipv.quiver(x, y, z, np.cos(phi), np.sin(phi), np.zeros((1,len(phi))),size=6, color=colors[:,:,:3])
-ipv.animation_control(quiver, interval=500)
+ipv.animation_control(quiver, interval=clock_rate)
 
 ipv.save('./animations/{}_animation.html'.format(filename))
 

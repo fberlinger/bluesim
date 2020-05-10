@@ -1,9 +1,14 @@
+"""Simulates a Bluebot. Add behavioral code here.
+"""
 from math import *
 import numpy as np
 import time
 
 
 class Fish():
+    """Bluebot instance
+    """
+    
     def __init__(self, my_id, dynamics, environment):
         # Arguments
         self.id = my_id
@@ -23,19 +28,14 @@ class Fish():
 
 
     def run(self):
+        """(1) Get neighbors from environment, (2) move accordingly, (3) update your state in environment
+        """
         robots, rel_pos, dist = self.environment.get_robots(self.id)
         target_pos, vel = self.move(robots, rel_pos, dist)
         self.environment.update_states(self.id, target_pos, vel)
 
     def lj_force(self, robots, rel_pos, dist, r_target):
         """lj_force derives the Lennard-Jones potential and force based on the relative positions of all neighbors and the desired self.target_dist to neighbors. The force is a gain factor, attracting or repelling a fish from a neighbor. The center is a point in space toward which the fish will move, based on the sum of all weighted neighbor positions.
-
-        Args:
-            neighbors (set): Visible neighbors
-            rel_pos (dict): Relative positions of visible neighbors
-
-        Returns:
-            np.array: Weighted 3D direction based on visible neighbors
         """
         a = 12
         b = 6
@@ -58,8 +58,8 @@ class Fish():
         return (center, magn)
 
     def depth_ctrl_vision(self, r_move_g):
-        """Controls diving depth based on direction of desired move.
-
+        """Vision-like depth control
+        
         Args:
             r_move_g (np.array): Relative position of desired goal location in robot frame.
         """
@@ -73,8 +73,8 @@ class Fish():
             self.dorsal = 0
 
     def depth_ctrl_psensor(self, r_move_g):
-        """Controls diving depth in a pressure sensor fashion. Own depth is "measured", i.e. reveiled by the interaction. Depth control is then done based on a target depth coming from a desired goal location in the robot frame.
-
+        """Pressure-sensor-like depth control
+        
         Args:
             r_move_g (np.array): Relative position of desired goal location in robot frame.
         """
@@ -88,9 +88,10 @@ class Fish():
 
     def home(self, r_move_g, magnitude):
         """Homing behavior. Sets fin controls to move toward a desired goal location.
-
+        
         Args:
             r_move_g (np.array): Relative position of desired goal location in robot frame.
+            magnitude (TYPE): Description
         """
         caudal_range = 35 # abs(heading) below which caudal fin is switched on
         freq_c = min(0.5 + 1/250 * magnitude, 1)
@@ -132,6 +133,8 @@ class Fish():
                 self.caudal = 0
 
     def move(self, robots, rel_pos, dist):
+        """Decision-making based on neighboring robots and corresponding move
+        """
         if not robots: # no robots, continue with ctrl from last step
             target_pos, self_vel = self.dynamics.simulate_move(self.id)
             return (target_pos, self_vel)

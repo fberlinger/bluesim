@@ -1,17 +1,14 @@
+"""Central data base keeping track of positions, velocities, relative positions, and distances of all simulated fishes
+"""
 import math
 import random
 import numpy as np
 from scipy.spatial.distance import cdist
 
 class Environment():
-    """The dynamic network of robot nodes in the underwater environment
-
-    This class keeps track of the network dynamics by storing the positions of
-    all nodes. It contains functions to derive the distorted position from a
-    target position by adding a distortion and noise, to update the position of
-    a node, to update the distance between nodes, to derive the probability of
-    receiving a message from a node based on that distance, and to get the
-    relative position from one node to another node.
+    """Simulated fish environment
+    
+    Fish get their visible neighbors and corresponding relative positions and distances from here. Fish also update their own positions after moving in here. Environmental tracking data is used for simulation analysis.
     """
 
     def __init__(self, pos, vel, arena):
@@ -31,21 +28,29 @@ class Environment():
         self.init_tracking()
 
     def log_to_file(self, filename):
+        """Logs tracking data to file
+        """
         np.savetxt('./logfiles/{}_data.txt'.format(filename), self.tracking, fmt='%.2f', delimiter=',')
 
     def init_tracking(self):
+        """Initializes tracking
+        """
         pos = np.reshape(self.pos, (1,self.no_robots*self.no_states))
         vel = np.reshape(self.vel, (1,self.no_robots*self.no_states))
         self.tracking = np.concatenate((pos,vel), axis=1)
         self.updates = 0
 
     def update_tracking(self):
+        """Updates tracking after every fish took a turn
+        """
         pos = np.reshape(self.pos, (1,self.no_robots*self.no_states))
         vel = np.reshape(self.vel, (1,self.no_robots*self.no_states))
         current_state = np.concatenate((pos,vel), axis=1)
         self.tracking = np.concatenate((self.tracking,current_state), axis=0)
     
     def init_states(self):
+        """Initializes fish positions and velocities
+        """
         # Restrict initial positions to arena size
         self.pos[:,0] = np.clip(self.pos[:,0], 0, self.arena_size[0])
         self.pos[:,1] = np.clip(self.pos[:,1], 0, self.arena_size[1])
@@ -61,6 +66,8 @@ class Environment():
         self.dist = cdist(self.pos[:,:3], self.pos[:,:3], 'euclidean') # without phi; [no_robots X no_robots]
 
     def update_states(self, source_id, pos, vel): # add noise
+        """Updates a fish state and affected realtive positions and distances
+        """
         # Position and velocity
         self.pos[source_id,0] = np.clip(pos[0], 0, self.arena_size[0])
         self.pos[source_id,1] = np.clip(pos[1], 0, self.arena_size[1])
@@ -88,6 +95,8 @@ class Environment():
             self.update_tracking()
 
     def get_robots(self, source_id, visual_noise=False):
+        """Provides visible neighbors and relative positions and distances to a fish
+        """
         robots = set(range(self.no_robots)) # all robots
         robots.discard(source_id) # discard self
 
@@ -103,6 +112,8 @@ class Environment():
         return (robots, rel_pos, self.dist[source_id])
 
     def visual_range(self, source_id, robots, v_range=3000):
+        """Deletes fishes outside of visible range
+        """
         conn_drop = 0.005
         
         candidates = robots.copy()
@@ -121,12 +132,7 @@ class Environment():
                 robots.remove(robot)
 
     def blind_spot(self, source_id, robots, rel_pos, w_blindspot=50):
-        """Omits robots within the blind spot behind own body.
-
-        Args:
-            source_id (int): Fish ID
-            robots (set): Set of visible robots
-            rel_pos (dict): Relative positions of robots
+        """Omits fishes within the blind spot behind own body
         """
         r_blockage = w_blindspot/2
 
@@ -146,12 +152,7 @@ class Environment():
                     robots.remove(robot)
 
     def occlusions(self, source_id, robots, rel_pos, r_sphere=50):
-        """Omits invisible robots occluded by others.
-
-        Args:
-            ource_id (int): Fish ID
-            robots (set): Set of visible robots
-            rel_pos (dict): Relative positions of robots
+        """Omits invisible fishes occluded by others
         """
         if not robots:
             return
@@ -187,6 +188,8 @@ class Environment():
                 n_valid.append(robot)
 
     def visual_noise(self, source_id, rel_pos):
+        """Adds visual noise
+        """
         magnitudes = 0.1 * np.array([self.dist[source_id]]).T # 10% of distance
         noise = magnitudes * (np.random.rand(self.no_robots, self.no_states) - 0.5) # zero-mean uniform noise
         n_rel_pos = rel_pos + noise
@@ -216,22 +219,10 @@ class Environment():
 
     def rot_global_to_robot(self, phi):
             """Rotate global coordinates to robot coordinates. Used before simulation of dynamics.
-
-            Args:
-                source_id (id): Fish ID
-
-            Returns:
-                np.array: 3x3 rotation matrix based on current orientation
             """
             return np.array([[math.cos(phi), math.sin(phi), 0], [-math.sin(phi), math.cos(phi), 0], [0, 0, 1]])
 
     def rot_robot_to_global(self, phi):
-            """Rotate global coordinates to robot coordinates. Used before simulation of dynamics.
-
-            Args:
-                source_id (id): Fish ID
-
-            Returns:
-                np.array: 3x3 rotation matrix based on current orientation
+            """Rotate robot coordinates to global coordinates. Used after simulation of dynamics.
             """
             return np.array([[math.cos(phi), -math.sin(phi), 0], [math.sin(phi), math.cos(phi), 0], [0, 0, 1]])

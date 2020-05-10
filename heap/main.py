@@ -1,15 +1,40 @@
+"""Runs experiments. Change parameters here.
+
+Attributes:
+    arena (np-array of ints): Arena size in mm, [l, w, h]
+    arena_center (np-array of floats): Arena center
+    clock_freq (int): Fish update frequency
+    clock_rate (float): Fish update rate
+    dynamics (class instance): Fish dynamics
+    environment (class instance): Fish environment
+    filename (string): Time-prefix of logfiles, yymmdd_hhmmss
+    fishes (list of class instances): Fishes
+    H (class instance): Min heap
+    initial_spread (int): Area spread of fish at initialization
+    no_fish (int): Number of simulated fishes
+    pos (np-array of floats): Fish positions at initialization, no_fish x [x,y,z,phi]
+    prog_incr (float): Description
+    simulation_steps (float): Required number of steps to simulate no_fish with clock_freq for simulation_time
+    simulation_time (int): Experiment time in s
+    steps (int): Simulation steps counter
+    t_start (float): Experiment start time
+    vel (np-array of floats): Fish velocities at initialization, no_fish x [vx,vy,vz,vphi]
+"""
+import json
 import math
-import random
-import time
 import numpy as np
+import random
+import sys
+import time
 
 from fish import Fish
 from environment import Environment
 from dynamics import Dynamics
 from lib_heap import Heap
 
+
 def exp_rv(param):
-    """Draw a uniform random number between 0 and 1 and returns an exponentially distributed random number with parameter param.
+    """Draws a uniform random number between 0 and 1 and returns an exponentially distributed random number with parameter param.
     
     Args:
         param (float): Parameter of exponentially distributed random number
@@ -20,10 +45,26 @@ def exp_rv(param):
     x = random.random()
     return -math.log(1-x)/param
 
+def log_meta():
+    """Logs the meta data of the experiment
+    """
+    with open('./logfiles/{}_meta.csv'.format(filename), 'a') as f:
+        f.write('Experiment, {}\nNumber of fishes, {}\nSimulation time, {}\nClock frequency, {}\nArena [mm], {}'.format(experiment_type, no_fish, simulation_time, clock_freq, arena))
+
+    meta = {'Experiment': experiment_type, 'Number of fishes': no_fish, 'Simulation time [s]': simulation_time, 'Clock frequency [Hz]': clock_freq}
+    with open('./logfiles/{}_meta.txt'.format(filename), 'w') as f:
+        json.dump(meta, f)
+
+# Read Experiment Description
+try:
+    experiment_type = sys.argv[1]
+except:
+    print('Please provide a description of this experiment, e.g.:\n >python main.py milling')
+    sys.exit()
 
 # Experimental Parameters
 no_fish = 20
-simulation_time = 100 # [s]
+simulation_time = 10 # [s]
 clock_freq = 2
 clock_rate = 1/clock_freq
 
@@ -79,7 +120,8 @@ print('| Duration: {} sec\n -'.format(round(time.time()-t_start)))
 # Save Data
 filename = time.strftime("%y%m%d_%H%M%S") # date_time
 environment.log_to_file(filename)
+log_meta()
 
-print('Simulation data got saved in ./logfiles/{}_data.txt\n -'.format(filename))
+print('Simulation data got saved in ./logfiles/{}_data.txt,\nand corresponding experimental info in ./logfiles/{}_meta.txt.\n -'.format(filename, filename))
 print('Create corresponding animation by running >python animation.py {}'.format(filename))
 print('#### GOODBYE AND SEE YOU SOON AGAIN ####')
