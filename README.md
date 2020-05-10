@@ -29,7 +29,7 @@ Installation: Manually following instructions on https://github.com/maartenbredd
 
 ## Upload Code for an Experiment on the Virtual Bluebots
 
-*Use the heap implementation for maximum performance! The thread implementation is not currently fully supported.*
+*Use the heap implementation for maximum performance! The threads implementation is not currently fully supported.*
 
 1. Go to `*/FastSim/heap`
 
@@ -51,7 +51,7 @@ Run `main.py` from a terminal, together with an experiment description, e.g.:
 python main.py schooling
 ```
 
-Simulation results get saved in `./logfiles/` with a `yymmdd_hhmmss` prefix in the filename. Experimental parameters are saved in `yymmdd_hhmmss_meta.txt`; data in `yymmdd_hhmmss_data.txt`.
+Simulation results get saved in `./logfiles/` with a `yymmdd_hhmmss` prefix in the filename. Experimental parameters are saved in `yymmdd_hhmmss_meta.txt`; experimental data in `yymmdd_hhmmss_data.txt`.
 
 Results can be animated by running `animation.py` from a terminal, together with the prefix of the desired file, e.g.:
 
@@ -62,3 +62,7 @@ python animation.py 201005_111211
 Animation results get saved as html-files in `./logfiles/` with the corresponding `yymmdd_hhmmss` prefix in the filename. Open with your favorite browser (firefox is recommended for full screen views); sit back and watch the extravaganza!
 
 ## Data Format
+
+
+## Simulation Architecture
+tbd: explain environment, explain heap, (discuss threads)
