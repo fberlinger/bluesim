@@ -5,22 +5,21 @@ FastSim is a realistic three dimensional simulator to test ideas for collective 
 ## Requirements
 
 - Python 3.6
+- Matplotlib
 - Numpy
 - Scipy
-- Matplotlib
-- json
 - (PIP _not mandatory but recommended_)
 
 ## Installation
 
-Either install Jupyter, Numpy, Scipy, Matplotlib, and json via PIP:
+Either install Matplotlib, Numpy, and Scipy via PIP:
 
 ```
-git clone https://code.harvard.edu/flb979/FISH && cd FISH
+git clone https://code.harvard.edu/flb979/FastSim && cd FastSim
 pip install -r ./requirements.txt
 ```
 
-Or manually via https://jupyter.org/install and https://scipy.org/install.html
+Or manually via https://scipy.org/install.html
 
 ## Additional Requirement if Animations are Desired
 
@@ -30,15 +29,19 @@ Installation: Manually following instructions on https://github.com/maartenbredd
 
 ## Upload Code for an Experiment on the Virtual Bluebots
 
-**Use the heap implementation for maximum performance!**
+*Use the heap implementation for maximum performance! The thread implementation is not currently fully supported.*
 
-Go to the subfolder `fishfood`, choose one of the following experiments, and copy its file ending in `.py` to the current `FastSim` folder:
+1. Go to `*/FastSim/heap`
 
-Rename the copied file in `BlueSim` to `fish.py`.
+2. Delete `fish.py`
+
+3. Go to the subfolder `fishfood`, create a copy of `fish_template.py` and rename it, implement your Bluebot code there; **or** choose an existing experiment-file
+
+4. Copy your file to the `heap` parent-folder, and rename it to `fish.py`
+
+**Warning: Any changes made directly in `fish.py` will be lost during the next execution of step 2. Save your final code in the `fishfood` folder.**
 
 ## Run an Experiment with Simulated Bluebots
-
-FastSim will run your selected experiment that you copied and renamed to `fish.py`.
 
 Change experimental parameters such as number of fish and simulation time in `main.py`.
 
