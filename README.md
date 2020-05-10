@@ -62,7 +62,31 @@ python animation.py 201005_111211
 Animation results get saved as html-files in `./logfiles/` with the corresponding `yymmdd_hhmmss` prefix in the filename. Open with your favorite browser (firefox is recommended for full screen views); sit back and watch the extravaganza!
 
 ## Data Format
+Simulation data in `./logfiles/yymmdd_hhmmss_data.txt` includes the positions and velocities of all fishes (columns) over time (rows) in csv-format of shape:
 
+```
+(simulation_time * clock_freq + 1) X (no_fishes * 8),
+```
+
+with parameters found in `./logfiles/yymmdd_hhmmss_meta.txt`.
+
+The time interval between rows is `1/clock_freq`. Within a row, the columns contain `no_fishes * 4` positions followed by `no_fishes * 4` velocities. For a given fish, the position are its x-, y-, and z-coordinates and its orientation angle phi, the velocity is the first derivative of the position.
+
+Data is easily loaded into matrix format with numpy loadtxt, e.g.:
+
+```
+data = np.loadtxt('./logfiles/yymmdd_hhmmss_data.txt', delimiter=','),
+```
+
+and can be sliced for looking at a particular fish `i`, or instance in time `t` as follows:
+
+```
+pos_i = data[:, no_fishes*i : no_fishes*i+4]
+vel_i = data[:, no_fishes+no_fishes*i : no_fishes+no_fishes*i+4]
+
+pos_t = data[t, :no_fishes*4]
+vel_t = data[t, no_fishes*4:]
+```
 
 ## Simulation Architecture
 tbd: explain environment, explain heap, (discuss threads)
