@@ -5,9 +5,12 @@ import random
 import numpy as np
 from scipy.spatial.distance import cdist
 
+U_LED_DX = 86 # [mm] leds x-distance on BlueBot
+U_LED_DZ = 86 # [mm] leds z-distance on BlueBot
+
 class Environment():
     """Simulated fish environment
-    
+
     Fish get their visible neighbors and corresponding relative positions and distances from here. Fish also update their own positions after moving in here. Environmental tracking data is used for simulation analysis.
     """
 
@@ -20,10 +23,14 @@ class Environment():
         self.r_sphere = fish_specs[2] # radius of blocking sphere for occlusion, [mm]
         self.n_magnitude = fish_specs[3] # visual noise magnitude, [% of distance]
         self.arena_size = arena # x, y, z
-        
+
         # Parameters
         self.no_robots = self.pos.shape[0]
         self.no_states = self.pos.shape[1]
+
+        self.leds_pos = [np.zeros((3,3))]*np.size(self.pos,0) #empty init, filled with update_leds() below
+        for i in range(np.size(self.pos,0)):
+            self.update_leds(i)
 
         # Initialize robot states
         self.init_states()
@@ -35,6 +42,25 @@ class Environment():
         """Logs tracking data to file
         """
         np.savetxt('./logfiles/{}_data.txt'.format(filename), self.tracking, fmt='%.2f', delimiter=',')
+
+    def update_leds(self, source_index):
+        #pos is led1
+        pos = self.pos[source_index][0:3]
+        phi = self.pos[source_index][3]
+
+        x1 = pos[0]
+        x2 = x1
+        x3 = x1 + math.cos(phi)*U_LED_DX
+
+        y1 = pos[1]
+        y2 = y1
+        y3 = y1 + math.sin(phi)*U_LED_DX
+
+        z1 = pos[2]
+        z2 = z1 + U_LED_DZ
+        z3 = z1
+
+        self.leds_pos[source_index] = np.array([[x1, x2, x3],[y1, y2, y3],[z1, z2, z3]])
 
     def init_tracking(self):
         """Initializes tracking
@@ -51,7 +77,7 @@ class Environment():
         vel = np.reshape(self.vel, (1,self.no_robots*self.no_states))
         current_state = np.concatenate((pos,vel), axis=1)
         self.tracking = np.concatenate((self.tracking,current_state), axis=0)
-    
+
     def init_states(self):
         """Initializes fish positions and velocities
         """
@@ -86,7 +112,7 @@ class Environment():
         self.rel_pos[source_id,:] = rel_pos # row
         rel_pos_ = np.reshape(rel_pos, (self.no_robots, self.no_states))
         self.rel_pos[:,source_id*self.no_states:source_id*self.no_states+self.no_states] = -rel_pos_ # columns
-        
+
         # Relative distances
         dist = np.linalg.norm(rel_pos_[:,:3], axis=1) # without phi
         self.dist[source_id,:] = dist
@@ -119,7 +145,7 @@ class Environment():
         """Deletes fishes outside of visible range
         """
         conn_drop = 0.005
-        
+
         candidates = robots.copy()
         for robot in candidates:
             d_robot = self.dist[source_id][robot]
@@ -143,7 +169,7 @@ class Environment():
         phi = self.pos[source_id,3]
         phi_xy = [math.cos(phi), math.sin(phi)]
         mag_phi = np.linalg.norm(phi_xy)
-        
+
         candidates = robots.copy()
         for robot in candidates:
             dot = np.dot(phi_xy, rel_pos[robot,:2])
@@ -230,3 +256,44 @@ class Environment():
             """Rotate robot coordinates to global coordinates. Used after simulation of dynamics.
             """
             return np.array([[math.cos(phi), -math.sin(phi), 0], [math.sin(phi), math.cos(phi), 0], [0, 0, 1]])
+
+    def calc_reflections(self, leds_list):
+        refl_list = []
+        for led in leds_list:
+            if led[2] > 10: #at least 10mm below surface to have a reflection
+                refl = led + np.array([0,0, -2*led[2]])
+                refl_list.append(refl)
+        return refl_list
+
+    def calc_relative_angles(self, source_id): #copied and adapted from BlueSwarm Code "avoid_duplicates_by_angle" #pw split this up in env and fish part?
+        """Use right and left cameras just up to the xz-plane such that the overlapping camera range disappears and there are no duplicates.
+
+        Returns:
+            tuple: all_blobs (that are valid, i.e. not duplicates) and their all_angles
+        """
+        add_reflections = True
+        leds = [x for i,x in enumerate(self.leds_pos) if i != source_id]   #ignore my own leds
+        leds_list = list(np.transpose(np.hstack(leds)))
+
+        if add_reflections:
+            refl_list = self.calc_reflections(leds_list)
+            leds_list = leds_list + refl_list
+        #print("leds_list",len(leds_list),leds_list)
+        my_pos = self.pos[source_id][0:3]
+        my_phi = self.pos[source_id][3]
+        R = np.array([[math.cos(-my_phi), -math.sin(-my_phi), 0],[math.sin(-my_phi), math.cos(-my_phi), 0],[0,0,1]])# rotate into my coord system
+
+        all_blobs = np.empty((3,0))
+        all_angles = np.empty(0)
+        for led in leds_list:
+            relative_coordinates = np.dot(R,((led - my_pos)[:, np.newaxis]))
+            relative_coordinates = relative_coordinates/np.linalg.norm(relative_coordinates)#normalize from xyz to pqr
+            #add noise
+            noise_magnitude = 0#0.1 # +-10% of actual distance; scale noise with distance of point --> the further away, the less acurate is measurement
+            #relative_coordinates += np.random.uniform(-1,1,3)[:, np.newaxis]*noise_magnitude #add noise
+            all_blobs = np.append(all_blobs, relative_coordinates, axis=1)
+            angle = np.arctan2(relative_coordinates[1], relative_coordinates[0])
+            all_angles = np.append(all_angles, angle)
+
+        p = np.random.permutation(len(leds_list)) #mix up the order to test sorting algorithm
+        return (all_blobs[:,p], all_angles[p]) #angles in rad!

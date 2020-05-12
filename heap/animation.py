@@ -20,14 +20,17 @@ import numpy as np
 import ipyvolume as ipv
 import matplotlib.cm as cm
 import sys
+import os
+import webbrowser
 
 
 # Load Data
 try:
     filename = sys.argv[1]
 except:
-    print('Provide prefix of data you want to animate in format yymmdd_hhmmss as command line argument, e.g.:\n >python animation.py 201005_111211')
-    sys.exit()
+    list_dir = os.listdir('logfiles')
+    filename = sorted(list_dir)[-1][:13]
+    print('filename not specified! automatically choosing newest file:', filename)
 try:
     data = np.loadtxt('./logfiles/{}_data.txt'.format(filename), delimiter=',')
     with open('./logfiles/{}_meta.txt'.format(filename), 'r') as f:
@@ -78,5 +81,5 @@ quiver = ipv.quiver(x, y, z, np.cos(phi), np.sin(phi), np.zeros((1,len(phi))),si
 ipv.animation_control(quiver, interval=clock_rate)
 
 ipv.save('./animations/{}_animation.html'.format(filename))
-
-print('BLUEANIMAT saved your animation in ./animations/{}_animation.html.\nOpen with your favorite browser, sit back and enjoy the extravaganza!'.format(filename))
+webbrowser.open_new_tab('file://'+ os.getcwd() +'/animations/{}_animation.html'.format(filename))
+print('BLUEANIMAT saved your animation in ./animations/{}_animation.html.\n and is opening it for you in the browser, sit back and enjoy the extravaganza!'.format(filename))

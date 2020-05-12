@@ -35,10 +35,10 @@ from lib_heap import Heap
 
 def exp_rv(param):
     """Draws a uniform random number between 0 and 1 and returns an exponentially distributed random number with parameter param.
-    
+
     Args:
         param (float): Parameter of exponentially distributed random number
-    
+
     Returns:
         float: Exponentially distributed random number
     """
@@ -62,8 +62,8 @@ except:
 ## Feel free to loop over multiple simulations with different parameters! ##
 
 # Experimental Parameters
-no_fish = 20
-simulation_time = 10 # [s]
+no_fish = 7
+simulation_time = 40 # [s]
 clock_freq = 2 # [Hz]
 clock_rate = 1/clock_freq
 
