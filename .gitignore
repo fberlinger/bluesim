@@ -1,0 +1,6 @@
+#git ignore files created when running code
+__pycache__/
+
+#git ignore log files
+logfiles/
+animations/
