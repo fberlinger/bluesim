@@ -46,7 +46,7 @@ clock_freq = meta['Clock frequency [Hz]']
 clock_rate = 1000/clock_freq # [ms]
 arena = meta['Arena [mm]']
 timesteps = data.shape[0]
-fishes = int(data.shape[1]/8)
+fishes = math.floor(data.shape[1]/8)
 
 # Format Data
 # x = data[:, :1]

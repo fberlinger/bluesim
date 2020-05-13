@@ -14,7 +14,7 @@ class Environment():
     Fish get their visible neighbors and corresponding relative positions and distances from here. Fish also update their own positions after moving in here. Environmental tracking data is used for simulation analysis.
     """
 
-    def __init__(self, pos, vel, fish_specs, arena):
+    def __init__(self, pos, vel, fish_specs, arena, pred_bool):
         # Arguments
         self.pos = pos # x, y, z, phi; [no_robots X 4]
         self.vel = vel # pos_dot
@@ -23,6 +23,7 @@ class Environment():
         self.r_sphere = fish_specs[2] # radius of blocking sphere for occlusion, [mm]
         self.n_magnitude = fish_specs[3] # visual noise magnitude, [% of distance]
         self.arena_size = arena # x, y, z
+        self.pred_bool = pred_bool
 
         # Parameters
         self.no_robots = self.pos.shape[0]
@@ -32,11 +33,20 @@ class Environment():
         for i in range(np.shape(self.pos)[0]):
             self.update_leds(i)
 
+
         # Initialize robot states
         self.init_states()
 
+        # Init predator
+        if self.pred_bool:
+            self.pred_pos = np.zeros((4)) #predator position x,y,z,phi
+            self.pred_pos[0] = self.arena_size[0]/2
+            self.pred_pos[1] = -self.arena_size[1] #place predator outside of visible range
+            self.pred_visible = False
+
         # Initialize tracking
         self.init_tracking()
+
 
     def log_to_file(self, filename):
         """Logs tracking data to file
@@ -67,7 +77,13 @@ class Environment():
         """
         pos = np.reshape(self.pos, (1,self.no_robots*self.no_states))
         vel = np.reshape(self.vel, (1,self.no_robots*self.no_states))
-        self.tracking = np.concatenate((pos,vel), axis=1)
+
+        if self.pred_bool:
+            pred_pos = np.reshape(self.pred_pos, (1,self.no_states))
+            self.tracking = np.concatenate((pos,vel,pred_pos), axis=1)
+        else:
+            self.tracking = np.concatenate((pos,vel), axis=1)
+
         self.updates = 0
 
     def update_tracking(self):
@@ -75,7 +91,11 @@ class Environment():
         """
         pos = np.reshape(self.pos, (1,self.no_robots*self.no_states))
         vel = np.reshape(self.vel, (1,self.no_robots*self.no_states))
-        current_state = np.concatenate((pos,vel), axis=1)
+        if self.pred_bool:
+            pred_pos = np.reshape(self.pred_pos, (1,self.no_states))
+            current_state = np.concatenate((pos,vel,pred_pos), axis=1)
+        else:
+            current_state = np.concatenate((pos,vel), axis=1)
         self.tracking = np.concatenate((self.tracking,current_state), axis=0)
 
     def init_states(self):
@@ -123,7 +143,7 @@ class Environment():
         if self.updates >= self.no_robots:
             self.updates = 0
             self.update_tracking()
-            
+
         # Update leds
         self.update_leds(source_id)
 
@@ -292,7 +312,6 @@ class Environment():
             my_phi = self.pos[source_id][3]
             R = np.array([[math.cos(-my_phi), -math.sin(-my_phi), 0],[math.sin(-my_phi), math.cos(-my_phi), 0],[0,0,1]])# rotate into my coord system
 
-
             for led in leds_list:
                 relative_coordinates = np.dot(R, ((led - my_pos)[:, np.newaxis]))
                 relative_coordinates = relative_coordinates/np.linalg.norm(relative_coordinates)#normalize from xyz to pqr
@@ -303,3 +322,32 @@ class Environment():
 
         p = np.random.permutation(np.shape(all_blobs)[1]) #mix up the order to test sorting algorithm
         return all_blobs[:,p]
+
+    def get_rel_pos_pred(self, source_index):
+        """Calculate the relative position from the source node to the predator"""
+        global_heading = self.pred_pos[:3] - self.pos[source_index][:3]
+        phi = self.pos[source_index][3]
+        R = np.array([[math.cos(-phi), -math.sin(-phi), 0],[math.sin(-phi), math.cos(-phi), 0],[0,0,1]]) #rotate by phi around z axis to transform from global to robot frame
+        robot_heading = R @ np.transpose(global_heading)
+
+        return robot_heading
+
+    def get_rel_orient_pred(self, source_index):
+        """Calculate the relative orientation of source node and predator """
+        diff = (self.pred_pos[3] - self.pos[source_index][3])
+
+        return np.arctan2(np.sin(diff), np.cos(diff))
+
+    def perceive_pred(self, source_id):
+        pred_rel_pos = self.get_rel_pos_pred(source_id) #pw: add noise, occlusion etc
+        pred_rel_phi = self.get_rel_orient_pred(source_id)
+
+        #those are the values that I can actually measure on robot, because scale is unknown (predator assumed as only one blob)
+        pred_alpha = []
+        pred_beta = []
+        detected = self.pred_visible# and np.linalg.norm(pred_rel_pos[0:1]) < 2000 #pw within range of 3m to be visible change this?
+        if detected:
+            pred_alpha  = np.arctan2(pred_rel_pos[1], pred_rel_pos[0])
+            pred_beta = np.arctan2(pred_rel_pos[2], math.sqrt(pred_rel_pos[0]**2 + pred_rel_pos[1]**2))
+
+        return pred_alpha, pred_beta, detected

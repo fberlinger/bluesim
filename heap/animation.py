@@ -23,6 +23,7 @@ import matplotlib.cm as cm
 import sys
 import os
 import webbrowser
+import math
 
 
 # Load Data
@@ -45,7 +46,8 @@ clock_freq = meta['Clock frequency [Hz]']
 clock_rate = 1000/clock_freq # [ms]
 arena = meta['Arena [mm]']
 timesteps = data.shape[0]
-fishes = int(data.shape[1]/8)
+fishes = math.floor(data.shape[1]/8)# predator is added at the very back
+pred_bool = meta['pred_bool']
 
 # Format Data
 x = data[:, :1]
@@ -65,21 +67,28 @@ for ii in range(1,fishes):
     #vy = np.concatenate((vy, data[:, 4*(fishes+ii)+1:4*(fishes+ii)+2]), axis=1)
     #vz = np.concatenate((vz, data[:, 4*(fishes+ii)+2:4*(fishes+ii)+3]), axis=1)
 
+if pred_bool:
+    x = np.concatenate((x, data[:, 8*fishes:8*fishes+1]), axis=1)
+    y = np.concatenate((y, data[:, 8*fishes+1:8*fishes+2]), axis=1)
+    z = np.concatenate((z, data[:, 8*fishes+2: 8*fishes+3]), axis=1)
+    phi = np.concatenate((phi, data[:, 8*fishes+3:8*fishes+4]), axis=1)
+
 # Colors
 v = np.sqrt(x**2 + y**2 + z**2)
 v -= v.min(); v /= v.max();
 colors = np.array([cm.Blues(k) for k in v])
 #colors[:, fish_id, :] = cm.Reds(0.5) # this fish is red
+if pred_bool:
+    colors[:, fishes, :] = cm.Reds(0.5) # predator is red
 
 # Create Animation
 fig = ipv.figure()
+quiver = ipv.quiver(x, y, z, np.cos(phi), np.sin(phi), np.zeros((1,len(phi))),size=6, color=colors[:,:,:3])
+ipv.animation_control(quiver, interval=clock_rate)
 ipv.xlim(0, arena[0])
 ipv.ylim(0, arena[1])
 ipv.zlim(0, arena[2])
 ipv.style.use('dark')
-
-quiver = ipv.quiver(x, y, z, np.cos(phi), np.sin(phi), np.zeros((1,len(phi))),size=6, color=colors[:,:,:3])
-ipv.animation_control(quiver, interval=clock_rate)
 
 ipv.save('./animations/{}_animation.html'.format(filename))
 webbrowser.open_new_tab('file://'+ os.getcwd() +'/animations/{}_animation.html'.format(filename))

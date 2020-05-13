@@ -28,6 +28,7 @@ import sys
 import time
 
 from fish import Fish
+from predator import Predator
 from environment import Environment
 from dynamics import Dynamics
 from lib_heap import Heap
@@ -48,7 +49,7 @@ def exp_rv(param):
 def log_meta():
     """Logs the meta data of the experiment
     """
-    meta = {'Experiment': experiment_type, 'Number of fishes': no_fish, 'Simulation time [s]': simulation_time, 'Clock frequency [Hz]': clock_freq, 'Arena [mm]': arena_list, 'Visual range [mm]': v_range, 'Width of blindspot [mm]': w_blindspot, 'Radius of blocking sphere [mm]': r_sphere, 'Visual noise magnitude [% of distance]': n_magnitude}
+    meta = {'Experiment': experiment_type, 'Number of fishes': no_fish, 'Simulation time [s]': simulation_time, 'Clock frequency [Hz]': clock_freq, 'Arena [mm]': arena_list, 'Visual range [mm]': v_range, 'Width of blindspot [mm]': w_blindspot, 'Radius of blocking sphere [mm]': r_sphere, 'Visual noise magnitude [% of distance]': n_magnitude, 'pred_bool': pred_bool}
     with open('./logfiles/{}_meta.txt'.format(filename), 'w') as f:
         json.dump(meta, f, indent=2)
 
@@ -56,17 +57,17 @@ def log_meta():
 try:
     experiment_type = sys.argv[1]
 except:
-    print('Please provide a description of this experiment, e.g.:\n >python main.py milling')
+    print('No experiment description provided, using "unknown"')
     experiment_type = 'unknown'
-    #sys.exit()
 
 ## Feel free to loop over multiple simulations with different parameters! ##
 
 # Experimental Parameters
-no_fish = 20
-simulation_time = 40 # [s]
+no_fish = 4
+simulation_time = 200 # [s]
 clock_freq = 2 # [Hz]
 clock_rate = 1/clock_freq
+pred_bool = True
 
 # Fish Specifications
 v_range=3000 # visual range, [mm]
@@ -89,9 +90,12 @@ pos[:,2] = 1000 * np.random.rand(1, no_fish) # z, all fish a same noise-free dep
 pos[:,3] = 2*math.pi * (np.random.rand(1, no_fish) - 0.5)# phi
 
 # Create Environment, Dynamics, And Heap
-environment = Environment(pos, vel, fish_specs, arena)
+environment = Environment(pos, vel, fish_specs, arena, pred_bool)
 dynamics = Dynamics(environment, clock_freq)
-H = Heap(no_fish)
+if pred_bool:
+    H = Heap(no_fish+1)
+else:
+    H = Heap(no_fish)
 
 # Create Fish Instances And Insert Into Heap
 fishes = []
@@ -100,6 +104,9 @@ for fish_id in range(no_fish):
     fishes.append(Fish(fish_id, dynamics, environment))
     H.insert(fish_id, clock)
 
+if pred_bool:
+    predator = Predator(dynamics, environment)
+    H.insert(no_fish, clock) #insert one more ticket in heap
 # Simulate
 print('#### WELCOME TO BLUESIM ####')
 print('Progress:', end=' ', flush=True)
@@ -117,7 +124,10 @@ while True:
             break
 
     (uuid, event_time) = H.delete_min()
-    fishes[uuid].run()
+    if uuid < no_fish:
+        fishes[uuid].run()
+    else:
+        predator.run()
     next_clock = event_time + exp_rv(clock_rate)
     H.insert(uuid, next_clock)
 
