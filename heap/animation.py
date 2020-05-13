@@ -16,6 +16,7 @@ Attributes:
     z (float): z-positions
 """
 import json
+import glob
 import numpy as np
 import ipyvolume as ipv
 import matplotlib.cm as cm
@@ -28,8 +29,8 @@ import webbrowser
 try:
     filename = sys.argv[1]
 except:
-    list_dir = os.listdir('logfiles')
-    filename = sorted(list_dir)[-1][:13]
+    list_dir = glob.glob('logfiles/*.txt')
+    filename = sorted(list_dir)[-1][9:-9]
     print('filename not specified! automatically choosing newest file:', filename)
 try:
     data = np.loadtxt('./logfiles/{}_data.txt'.format(filename), delimiter=',')

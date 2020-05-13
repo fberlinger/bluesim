@@ -136,10 +136,13 @@ class Environment():
         self.blind_spot(source_id, robots, rel_pos)
         self.occlusions(source_id, robots, rel_pos)
 
+        leds = self.calc_relative_leds(source_id, robots)
+
         if self.n_magnitude: # no overwrites of self.rel_pos and self.dist
-            n_rel_pos, n_dist = self.visual_noise(source_id, rel_pos)
-            return (robots, n_rel_pos, n_dist)
-        return (robots, rel_pos, self.dist[source_id])
+            n_rel_pos, n_dist = self.visual_noise(source_id, rel_pos) #pw add leds noise here
+            return (robots, n_rel_pos, n_dist, leds)
+
+        return (robots, rel_pos, self.dist[source_id], leds)
 
     def visual_range(self, source_id, robots):
         """Deletes fishes outside of visible range
@@ -265,14 +268,14 @@ class Environment():
                 refl_list.append(refl)
         return refl_list
 
-    def calc_relative_angles(self, source_id): #copied and adapted from BlueSwarm Code "avoid_duplicates_by_angle" #pw split this up in env and fish part?
+    def calc_relative_leds(self, source_id, robots): #copied and adapted from BlueSwarm Code "avoid_duplicates_by_angle" #pw split this up in env and fish part?
         """Use right and left cameras just up to the xz-plane such that the overlapping camera range disappears and there are no duplicates.
 
         Returns:
             tuple: all_blobs (that are valid, i.e. not duplicates) and their all_angles
         """
-        add_reflections = True
-        leds = [x for i,x in enumerate(self.leds_pos) if i != source_id]   #ignore my own leds
+        add_reflections = False
+        leds = [x for i,x in enumerate(self.leds_pos) if i in robots]#!= source_id]   #ignore my own leds and only take leds of fish that I can see
         leds_list = list(np.transpose(np.hstack(leds)))
 
         if add_reflections:
@@ -284,16 +287,13 @@ class Environment():
         R = np.array([[math.cos(-my_phi), -math.sin(-my_phi), 0],[math.sin(-my_phi), math.cos(-my_phi), 0],[0,0,1]])# rotate into my coord system
 
         all_blobs = np.empty((3,0))
-        all_angles = np.empty(0)
         for led in leds_list:
-            relative_coordinates = np.dot(R,((led - my_pos)[:, np.newaxis]))
+            relative_coordinates = np.dot(R, ((led - my_pos)[:, np.newaxis]))
             relative_coordinates = relative_coordinates/np.linalg.norm(relative_coordinates)#normalize from xyz to pqr
             #add noise
-            noise_magnitude = 0#0.1 # +-10% of actual distance; scale noise with distance of point --> the further away, the less acurate is measurement
+            #noise_magnitude = 0#0.1 # +-10% of actual distance; scale noise with distance of point --> the further away, the less acurate is measurement
             #relative_coordinates += np.random.uniform(-1,1,3)[:, np.newaxis]*noise_magnitude #add noise
             all_blobs = np.append(all_blobs, relative_coordinates, axis=1)
-            angle = np.arctan2(relative_coordinates[1], relative_coordinates[0])
-            all_angles = np.append(all_angles, angle)
 
-        p = np.random.permutation(len(leds_list)) #mix up the order to test sorting algorithm
-        return (all_blobs[:,p], all_angles[p]) #angles in rad!
+        p = np.random.permutation(np.shape(all_blobs)[1]) #mix up the order to test sorting algorithm
+        return all_blobs[:,p]

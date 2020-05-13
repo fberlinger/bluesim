@@ -57,12 +57,13 @@ try:
     experiment_type = sys.argv[1]
 except:
     print('Please provide a description of this experiment, e.g.:\n >python main.py milling')
-    sys.exit()
+    experiment_type = 'unknown'
+    #sys.exit()
 
 ## Feel free to loop over multiple simulations with different parameters! ##
 
 # Experimental Parameters
-no_fish = 7
+no_fish = 3
 simulation_time = 40 # [s]
 clock_freq = 2 # [Hz]
 clock_rate = 1/clock_freq
@@ -84,8 +85,8 @@ initial_spread = 500
 pos = np.zeros((no_fish, 4))
 vel = np.zeros((no_fish, 4))
 pos[:,:2] = initial_spread * (np.random.rand(no_fish, 2) - 0.5) + arena_center[:2] # x,y
-pos[:,2] = 10 * np.random.rand(1, no_fish) # z, all fish a same noise-free depth results in LJ lock
-pos[:,3] = math.pi * np.random.rand(1, no_fish) # phi
+pos[:,2] = 1000 * np.random.rand(1, no_fish) # z, all fish a same noise-free depth results in LJ lock
+pos[:,3] = 2*math.pi * (np.random.rand(1, no_fish) - 0.5)# phi
 
 # Create Environment, Dynamics, And Heap
 environment = Environment(pos, vel, fish_specs, arena)
