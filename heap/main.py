@@ -63,7 +63,7 @@ except:
 ## Feel free to loop over multiple simulations with different parameters! ##
 
 # Experimental Parameters
-no_fish = 3
+no_fish = 20
 simulation_time = 40 # [s]
 clock_freq = 2 # [Hz]
 clock_rate = 1/clock_freq

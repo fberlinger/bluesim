@@ -3,6 +3,7 @@
 from math import *
 import numpy as np
 import time
+import os, glob
 
 from filterpy.kalman import KalmanFilter
 from scipy.spatial.distance import cdist
@@ -42,17 +43,15 @@ class Fish():
 
 
         # Logger instance
-        with open('kf_{}.csv'.format(self.id), 'w') as f:
+        for filename in glob.glob("./logfiles/kf*"): #remove all previous files
+            os.remove(filename)
+
+        with open('./logfiles/kf_{}.csv'.format(self.id), 'w') as f:
             f.truncate()
-            f.write('TRACK_ID, ITERATION, X, Y, Z, PHI \n'
-            )
-        with open('nokf_{}.csv'.format(self.id), 'w') as f:
-            f.truncate()
-            f.write('TRACK_ID, ITERATION, X, Y, Z, PHI \n'
-            )
+            f.write('TRACK_ID, ITERATION, X, Y, Z, PHI \n')
 
     def init_kf(self, xyz_init, phi_init):
-        clock_freq = 2 #pw measure this!!!
+        dt = 0.5 #[s]#pw measure this!!!
         dim_state = 8
         dim_meas = 4 #only measure pos, not vel
         #dim_input = dim_state - dim_meas #only vel
@@ -70,7 +69,7 @@ class Fish():
 
         kf = KalmanFilter(dim_x=dim_state, dim_z=dim_meas)#, dim_u=dim_input)
         kf.x = np.concatenate((xyz_init, phi_init, v_init), axis=None)[:,np.newaxis]
-        kf.F = np.identity(dim_state) + np.pad(clock_freq*np.identity(dim_meas), ((0, 4), (4, 0)), 'constant',constant_values = (0,0)) #transition matrix: assume const vel; PW in BlueSwarm code should F be changed every iteration because dt is not const? Time-varying kalman filter
+        kf.F = np.identity(dim_state) + np.pad(dt*np.identity(dim_meas), ((0, 4), (4, 0)), 'constant',constant_values = (0,0)) #transition matrix: assume const vel; PW in BlueSwarm code should F be changed every iteration because dt is not const? Time-varying kalman filter
         kf.H = np.pad(np.identity(dim_meas), ((0, 0), (0, 4)), 'constant',constant_values = (0,0)) #measurement matrix: we measure pos
         #kf.B = np.append(np.zeros((4,4)), np.identity(dim_input), axis=0) #control matrix: u is directy imu input vel (integrated acc) and v_phi (gyro), so B is zero on position and identity on velocity
         kf.R = np.diag([noise_meas_xyz, noise_meas_xyz, noise_meas_xyz, noise_meas_phi]) #measurement noise
@@ -105,7 +104,7 @@ class Fish():
     def log_kf(self, rel_pos, rel_orient):
         """Log current state
         """
-        with open('kf_{}.csv'.format(self.id), 'a+') as f:
+        with open('./logfiles/kf_{}.csv'.format(self.id), 'a+') as f:
             for i in range(len(rel_pos)):
                 f.write(
                     '{}, {}, {}, {}, {}, {}\n'.format(
@@ -118,30 +117,12 @@ class Fish():
                     )
                 )
 
-    def log_nokf(self, rel_pos, rel_orient):
-        """Log current state
-        """
-        with open('nokf_{}.csv'.format(self.id), 'a+') as f:
-            for i in range(len(rel_pos)):
-                f.write(
-                    '{}, {}, {}, {}, {}, {}\n'.format(
-                        i,
-                        self.it_counter,
-                        rel_pos[i][0],
-                        rel_pos[i][1],
-                        rel_pos[i][2],
-                        rel_orient[i]
-                    )
-                )
-
-
     def run(self):
         """(1) Get neighbors from environment, (2) move accordingly, (3) update your state in environment
         """
-        robots, rel_pos, dist = self.environment.get_robots(self.id)
-        target_pos, vel = self.move()
+        robots, rel_pos, dist, leds = self.environment.get_robots(self.id)
+        target_pos, vel = self.move(leds)
         self.environment.update_states(self.id, target_pos, vel)
-
 
     def kalman_prediction_update(self):
         nr_tracks = len(self.kf_array)
@@ -402,7 +383,21 @@ class Fish():
 
         return xyz
 
-    def parse_orientation_reflections(self, all_blobs, all_angles, predicted_blobs, predicted_phi):
+    def calc_relative_angles(self, all_blobs): #copied and adapted from BlueSwarm Code "avoid_duplicates_by_angle" #pw split this up in env and fish part?
+        """Use right and left cameras just up to the xz-plane such that the overlapping camera range disappears and there are no duplicates.
+
+        Returns:
+            tuple: all_blobs (that are valid, i.e. not duplicates) and their all_angles
+        """
+        all_angles = np.empty(0)
+        for i in range(np.shape(all_blobs)[1]):
+            led = all_blobs[:,i]
+            angle = np.arctan2(led[1], led[0])
+            all_angles = np.append(all_angles, angle)
+
+        return all_angles #angles in rad!
+
+    def parse_orientation_reflections(self, all_blobs, predicted_blobs, predicted_phi):
         """Assigns triplets of blobs to single robots
 
         Idea: Sort all blobs by the angles/directions they are coming from. Pair duos of blobs that have most similar angles add third led.
@@ -424,14 +419,16 @@ class Fish():
         xyz_threeblob_new = []
         xyz_threeblob_new_ind = []
 
-        nr_blobs = len(all_angles)
+        nr_blobs = np.shape(all_blobs)[1]
         if nr_blobs < 3: # 0 robots
             return (xyz_threeblob_matched, phi_matched, xyz_threeblob_new, phi_new, track_threeblob_matched_ind)
 
-        unassigned_ind = set(range(nr_blobs))
+        # find all valid blobs and their respective angles
+        all_angles = self.calc_relative_angles(all_blobs)
 
         # subfunction: find vertically aligned leds (xyz_twoblob_candidates) and sort out reflections where >2 blobs have similar angle
         sorted_indices = np.argsort(all_angles)
+        unassigned_ind = set(range(nr_blobs))
         angle_thresh = 3 / 180*np.pi # below which 2 blobs are considered a duo (pw make 5deg, smaller for testing)
         vert_thresh = 0.0001 #pqr normalized
 
@@ -520,7 +517,6 @@ class Fish():
             i += 2 + ref
             neighbor_ind += 1
 #       (return twoblob_candidate_ind, xyz_twoblob_candidate, unassigned_ind)
-
         #subfunction: match xyz_twoblob_candidate with predicted_blobs (input twoblob_candidate_ind, xyz_twoblob_candidate, unassigned_ind)
         if xyz_twoblob_candidate:
             xyz_led1_candidate = np.array([coord[:,0] for coord in xyz_twoblob_candidate])
@@ -664,26 +660,15 @@ class Fish():
         #     self.caudal = 0.7
         # else:
             # self.caudal = 0
-        """not implemented yet
-        #move to avg height of swarm
-        if pitch > 1:
-            self.dorsal = 1
-        else:
-            self.dorsal = 0
-        """
 
-    def move(self):
+    def move(self, detected_blobs):
         """Decision-making based on neighboring robots and corresponding move
         """
         self.it_counter += 1
 
-        # find all valid blobs and their respective angles
-        detected_blobs, detected_angles = self.environment.calc_relative_angles(self.id)
-        # match blob triplets, give their orientation
-
         predicted_blobs, predicted_phi = self.kalman_prediction_update()
-
-        (xyz_matched, phi_matched, xyz_new, phi_new, matched_track_ind) = self.parse_orientation_reflections(detected_blobs, detected_angles, predicted_blobs, predicted_phi)
+        # match blob triplets, give their orientation
+        (xyz_matched, phi_matched, xyz_new, phi_new, matched_track_ind) = self.parse_orientation_reflections(detected_blobs, predicted_blobs, predicted_phi)
 
         self.kalman_measurement_update(xyz_matched, phi_matched, matched_track_ind) #predicted_ind has same length as xyz_matched and says to which track this measurement was matched
 
@@ -692,7 +677,6 @@ class Fish():
         (rel_pos_led1, rel_phi) = self.kalman_new_tracks(xyz_new, phi_new)
 
         # find target orientation
-        #print(self.id, rel_orient)
         center_orient = self.comp_center_orient(rel_phi)
         center_pos = self.comp_center_pos(rel_pos_led1)
 
@@ -700,12 +684,11 @@ class Fish():
         v_des = 0#0.2
         self.home_orient(phi_des, v_des)
         self.depth_ctrl_vert(center_pos[2])
-        #self.dorsal = 0
         """ debugging
         self.dorsal = 0
         self.caudal = 0
         self.pect_r = 0
-        self.pect_l = 0.4
+        self.pect_l = 0
         """
         self.dynamics.update_ctrl(self.dorsal, self.caudal, self.pect_r, self.pect_l)
         target_pos, self_vel = self.dynamics.simulate_move(self.id)

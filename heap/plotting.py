@@ -58,22 +58,7 @@ fishes = int(data.shape[1]/8)
 if plot_kf:
     protagonist_id = 1
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(30,15))
-    """
-    #add non kalman filtered data (relative position)
-    data = np.genfromtxt('nokf_{}.csv'.format(protagonist_id), delimiter=',')
-    data = data[1:,:] #cut title row
-    data_cut = np.delete(data, np.argwhere(data[:,5] == 0), axis = 0)
-    data_sort = data_cut[np.argsort(data_cut[:, 0])]
-    nr_tracks = int(data_sort[-1,0])
 
-    #colors = cm.Greens(np.linspace(0.3,0.8,nr_tracks+1))
-    for ii in range(nr_tracks+1):
-        data_track = data_sort[np.argwhere(data_sort[:,0]==ii)[:,0], :]
-        ax1.scatter(data_track[:,2], data_track[:,3], label='unfiltered_{}'.format(ii), marker = '*', s=250, color = 'g')
-        ax2.scatter(data_track[:,1], data_track[:,5] * 180/np.pi, label='unfiltered_{}'.format(ii), marker = '*', s=250, color = 'g')
-    ax1.legend()
-    ax2.legend()
-    """
     ax1.set_xlabel('x [mm]')
     ax1.set_ylabel('y [mm]')
     ax1.axis('equal')
@@ -91,8 +76,8 @@ if plot_kf:
 
         for idx, ii in enumerate(tracks):
             data_kf_track = data_kf[np.argwhere(data_kf[:,0]==ii)[:,0], :]
-            ax1.plot(data_kf_track[:,2], data_kf_track[:,3], marker = 'o', label='kf_{}'.format(ii), color = colors[idx,:])
-            ax2.plot(data_kf_track[:,1], np.arctan2(np.sin(data_kf_track[:,5]), np.cos(data_kf_track[:,5])) * 180/np.pi, marker = 'o', label='kf_{}'.format(ii), color = colors[idx,:])
+            ax1.plot(data_kf_track[:,2], data_kf_track[:,3], marker = '*', markersize=12, label='kf_{}'.format(ii), color = colors[idx,:])
+            ax2.plot(data_kf_track[:,1], np.arctan2(np.sin(data_kf_track[:,5]), np.cos(data_kf_track[:,5])) * 180/np.pi, marker = '*', markersize=12, label='kf_{}'.format(ii), color = colors[idx,:])
 
         ax1.legend()
         ax2.legend()
@@ -122,10 +107,22 @@ if plot_kf:
 if plot_phi:
     fig, axs = plt.subplots(1, 1, figsize=(15,15))
 
-    #axs.plot(observer.phi_mean[:], '--k', LineWidth=4, label='mean') pw calculate
-    #axs.plot(observer.phi_std[:], ':k', LineWidth=4, label='std') pw calculate
+    phi_mean_cos = np.zeros((timesteps))
+    phi_mean_sin = np.zeros((timesteps))
+
     for ii in range(fishes):
         axs.plot(np.arctan2(np.sin(data[:, 4*ii + 3]), np.cos(data[:, 4*ii + 3])), label=ii)
+        phi_mean_cos += np.cos(data[:, 4*ii + 3])
+        phi_mean_sin += np.sin(data[:, 4*ii + 3])
+
+    phi_mean_cos = phi_mean_cos/fishes
+    phi_mean_sin = phi_mean_sin/fishes
+    phi_mean = np.arctan2(phi_mean_sin, phi_mean_cos)
+    phi_std = np.sqrt(-np.log(phi_mean_sin**2 + phi_mean_cos**2))
+
+    axs.plot(phi_mean, '--k', LineWidth=4, color ='gray', label="mean")
+    axs.plot(phi_std, ':k', LineWidth=4, color ='gray', label="std")
+
     axs.set_xlabel('Time [s]')
     axs.set_ylabel('Phi [rad]')
     axs.legend()
@@ -134,6 +131,5 @@ if plot_phi:
     fig.suptitle('Phi over time')
     plt.show()
 
-
-    #print('The initial std phi is {0:.1f}rad.'.format(observer.phi_std[0])) pw calculate
-    #print('The final std phi is {0:.1f}rad.'.format(observer.phi_std[-1])) pw calculate
+    print('The initial std phi is {0:.1f}rad.'.format(phi_std[0]))
+    print('The final std phi is {0:.1f}rad.'.format(phi_std[-1]))

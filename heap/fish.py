@@ -31,7 +31,6 @@ class Fish():
 
         # behavior specific parameters
         self.it_counter = 0
-        self.recording = []
 
         #kf tracker init, move this to init
         self.kf_array = []
@@ -329,13 +328,13 @@ class Fish():
 
         xyz = np.empty([3,2])
         if abs(r2*p1 -r1*p2) < 0.0001:
-            print("pqr div by zero risk",pqr)
+            #print("pqr div by zero risk",pqr)
             d1 = 1
         else:
             d1 = p2 * delta/(r2*p1 -r1*p2)
 
         if abs(r2) < 0.0001:
-             print("pqr div by zero risk",pqr)
+            # print("pqr div by zero risk",pqr)
              d2 = d1
         else:
              d2 = (d1*r1 + delta)/r2
@@ -384,15 +383,15 @@ class Fish():
 
         return xyz
 
-    def calc_relative_angles(self, detected_blobs): #copied and adapted from BlueSwarm Code "avoid_duplicates_by_angle" #pw split this up in env and fish part?
+    def calc_relative_angles(self, all_blobs): #copied and adapted from BlueSwarm Code "avoid_duplicates_by_angle" #pw split this up in env and fish part?
         """Use right and left cameras just up to the xz-plane such that the overlapping camera range disappears and there are no duplicates.
 
         Returns:
             tuple: all_blobs (that are valid, i.e. not duplicates) and their all_angles
         """
         all_angles = np.empty(0)
-        for i in range(np.shape(detected_blobs)[1]):
-            led = detected_blobs[:,i]
+        for i in range(np.shape(all_blobs)[1]):
+            led = all_blobs[:,i]
             angle = np.arctan2(led[1], led[0])
             all_angles = np.append(all_angles, angle)
 
@@ -426,6 +425,7 @@ class Fish():
 
         # find all valid blobs and their respective angles
         all_angles = self.calc_relative_angles(all_blobs)
+
         # subfunction: find vertically aligned leds (xyz_twoblob_candidates) and sort out reflections where >2 blobs have similar angle
         sorted_indices = np.argsort(all_angles)
         unassigned_ind = set(range(nr_blobs))
@@ -669,8 +669,7 @@ class Fish():
         predicted_blobs, predicted_phi = self.kalman_prediction_update()
         # match blob triplets, give their orientation
         (xyz_matched, phi_matched, xyz_new, phi_new, matched_track_ind) = self.parse_orientation_reflections(detected_blobs, predicted_blobs, predicted_phi)
-        #print(self.id, "phi_matched",phi_matched)
-        self.recording.append(phi_matched)
+
         self.kalman_measurement_update(xyz_matched, phi_matched, matched_track_ind) #predicted_ind has same length as xyz_matched and says to which track this measurement was matched
 
         self.kalman_remove_lost_tracks(matched_track_ind)
@@ -678,7 +677,6 @@ class Fish():
         (rel_pos_led1, rel_phi) = self.kalman_new_tracks(xyz_new, phi_new)
 
         # find target orientation
-        #print(self.id, rel_orient)
         center_orient = self.comp_center_orient(rel_phi)
         center_pos = self.comp_center_pos(rel_pos_led1)
 
@@ -686,13 +684,12 @@ class Fish():
         v_des = 0#0.2
         self.home_orient(phi_des, v_des)
         self.depth_ctrl_vert(center_pos[2])
-        #self.dorsal = 0
-        # """ debugging
+        """ debugging
         self.dorsal = 0
         self.caudal = 0
-        self.pect_r = 0.2
+        self.pect_r = 0
         self.pect_l = 0
-        # """
+        """
         self.dynamics.update_ctrl(self.dorsal, self.caudal, self.pect_r, self.pect_l)
         target_pos, self_vel = self.dynamics.simulate_move(self.id)
 

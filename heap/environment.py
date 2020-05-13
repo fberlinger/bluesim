@@ -29,7 +29,7 @@ class Environment():
         self.no_states = self.pos.shape[1]
 
         self.leds_pos = [np.zeros((3,3))]*np.size(self.pos,0) #empty init, filled with update_leds() below
-        for i in range(np.size(self.pos,0)):
+        for i in range(np.shape(self.pos)[0]):
             self.update_leds(i)
 
         # Initialize robot states
@@ -123,6 +123,9 @@ class Environment():
         if self.updates >= self.no_robots:
             self.updates = 0
             self.update_tracking()
+            
+        # Update leds
+        self.update_leds(source_id)
 
     def get_robots(self, source_id, visual_noise=False):
         """Provides visible neighbors and relative positions and distances to a fish
@@ -275,25 +278,28 @@ class Environment():
             tuple: all_blobs (that are valid, i.e. not duplicates) and their all_angles
         """
         add_reflections = False
-        leds = [x for i,x in enumerate(self.leds_pos) if i in robots]#!= source_id]   #ignore my own leds and only take leds of fish that I can see
-        leds_list = list(np.transpose(np.hstack(leds)))
-
-        if add_reflections:
-            refl_list = self.calc_reflections(leds_list)
-            leds_list = leds_list + refl_list
-        #print("leds_list",len(leds_list),leds_list)
-        my_pos = self.pos[source_id][0:3]
-        my_phi = self.pos[source_id][3]
-        R = np.array([[math.cos(-my_phi), -math.sin(-my_phi), 0],[math.sin(-my_phi), math.cos(-my_phi), 0],[0,0,1]])# rotate into my coord system
-
         all_blobs = np.empty((3,0))
-        for led in leds_list:
-            relative_coordinates = np.dot(R, ((led - my_pos)[:, np.newaxis]))
-            relative_coordinates = relative_coordinates/np.linalg.norm(relative_coordinates)#normalize from xyz to pqr
-            #add noise
-            #noise_magnitude = 0#0.1 # +-10% of actual distance; scale noise with distance of point --> the further away, the less acurate is measurement
-            #relative_coordinates += np.random.uniform(-1,1,3)[:, np.newaxis]*noise_magnitude #add noise
-            all_blobs = np.append(all_blobs, relative_coordinates, axis=1)
+
+        leds = [x for i,x in enumerate(self.leds_pos) if i in robots]#!= source_id]   #ignore my own leds and only take leds of fish that I can see
+        if leds:
+            leds_list = list(np.transpose(np.hstack(leds)))
+
+            if add_reflections:
+                refl_list = self.calc_reflections(leds_list)
+                leds_list = leds_list + refl_list
+            #print("leds_list",len(leds_list),leds_list)
+            my_pos = self.pos[source_id][0:3]
+            my_phi = self.pos[source_id][3]
+            R = np.array([[math.cos(-my_phi), -math.sin(-my_phi), 0],[math.sin(-my_phi), math.cos(-my_phi), 0],[0,0,1]])# rotate into my coord system
+
+
+            for led in leds_list:
+                relative_coordinates = np.dot(R, ((led - my_pos)[:, np.newaxis]))
+                relative_coordinates = relative_coordinates/np.linalg.norm(relative_coordinates)#normalize from xyz to pqr
+                #add noise
+                #noise_magnitude = 0#0.1 # +-10% of actual distance; scale noise with distance of point --> the further away, the less acurate is measurement
+                #relative_coordinates += np.random.uniform(-1,1,3)[:, np.newaxis]*noise_magnitude #add noise
+                all_blobs = np.append(all_blobs, relative_coordinates, axis=1)
 
         p = np.random.permutation(np.shape(all_blobs)[1]) #mix up the order to test sorting algorithm
         return all_blobs[:,p]
