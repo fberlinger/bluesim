@@ -26,8 +26,8 @@ import numpy as np
 import random
 import sys
 import time
+import importlib
 
-from fish import Fish
 from environment import Environment
 from dynamics import Dynamics
 from lib_heap import Heap
@@ -35,10 +35,10 @@ from lib_heap import Heap
 
 def exp_rv(param):
     """Draws a uniform random number between 0 and 1 and returns an exponentially distributed random number with parameter param.
-    
+
     Args:
         param (float): Parameter of exponentially distributed random number
-    
+
     Returns:
         float: Exponentially distributed random number
     """
@@ -59,6 +59,7 @@ except:
     print('Please provide a description of this experiment, e.g.:\n >python main.py milling')
     sys.exit()
 
+Fish = getattr(importlib.import_module('fishfood.' + experiment_type), 'Fish') #import Fish class directly from module specified by experiment type
 ## Feel free to loop over multiple simulations with different parameters! ##
 
 # Experimental Parameters
@@ -85,7 +86,7 @@ pos = np.zeros((no_fish, 4))
 vel = np.zeros((no_fish, 4))
 pos[:,:2] = initial_spread * (np.random.rand(no_fish, 2) - 0.5) + arena_center[:2] # x,y
 pos[:,2] = 10 * np.random.rand(1, no_fish) # z, all fish a same noise-free depth results in LJ lock
-pos[:,3] = math.pi * np.random.rand(1, no_fish) # phi
+pos[:,3] = 2*math.pi * (np.random.rand(1, no_fish) - 0.5) # phi
 
 # Create Environment, Dynamics, And Heap
 environment = Environment(pos, vel, fish_specs, arena)
