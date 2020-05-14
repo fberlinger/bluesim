@@ -683,7 +683,9 @@ class Fish():
         phi_des = center_orient
         v_des = 0#0.2
         self.home_orient(phi_des, v_des)
-        self.depth_ctrl_vert(center_pos[2])
+        #self.depth_ctrl_vert(center_pos[2])
+        z_des = 1000
+        self.depth_ctrl_vert(z_des-self.environment.pos[self.id][2])
         """ debugging
         self.dorsal = 0
         self.caudal = 0

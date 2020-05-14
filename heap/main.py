@@ -57,15 +57,15 @@ def log_meta():
 try:
     experiment_type = sys.argv[1]
 except:
-    experiment_type = 'fountain'
+    experiment_type = 'fountain' #'aligning'#
     print('No experiment description provided, using as default', experiment_type)
-    
+
 Fish = getattr(importlib.import_module('fishfood.' + experiment_type), 'Fish') #import Fish class directly from module specified by experiment type
 ## Feel free to loop over multiple simulations with different parameters! ##
 
 # Experimental Parameters
-no_fish = 4
-simulation_time = 200 # [s]
+no_fish = 10
+simulation_time = 400 # [s]
 clock_freq = 2 # [Hz]
 clock_rate = 1/clock_freq
 
@@ -117,7 +117,11 @@ if pred_bool:
 print('#### WELCOME TO BLUESIM ####')
 print('Progress:', end=' ', flush=True)
 t_start = time.time()
-simulation_steps = no_fish*simulation_time*clock_freq # overall
+if pred_bool:
+    simulation_steps = no_fish*simulation_time*clock_freq # overall
+else:
+    simulation_steps = (no_fish+1)*simulation_time*clock_freq # overall
+
 steps = 0
 prog_incr = 0.1
 

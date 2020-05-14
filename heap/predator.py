@@ -90,7 +90,7 @@ class Predator():
 
         else:
             fish_phi_mean, fish_phi_std = self.calc_phi_mean_std()
-            std_thresh = 0.5
+            std_thresh = 0.25
             #print(fish_phi_std)
 
             if fish_phi_std < std_thresh: #well enough aligned

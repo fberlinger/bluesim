@@ -32,7 +32,7 @@ class Fish():
         # behavior specific parameters
         self.it_counter = 0
         self.behavior = 'align' #'aggregate'#pw change back
-        self.escaped = False
+        self.escape_started = False
         self.pred_undetected_count = 0
         self.escape_iteration_count = 0
         self.angle_escape = []
@@ -266,12 +266,12 @@ class Fish():
     def align(self, center_orient, pred_alpha, pred_beta, predator_detected):
         v_des = 0
         phi_des = center_orient
-        if predator_detected and abs(pred_alpha)>pi/2 and not self.escaped: #if predator is visible and behind me and I havent already done a previous escape maneuver
+        if predator_detected and abs(pred_alpha)>pi/2 and not self.escape_started: #if predator is visible and behind me and I havent already done a previous escape maneuver
             self.behavior = "predator_escape"
             print(self.id, "predator_escape")
-            self.escaped = True
-            #angle_sum =  pred_alpha - center_orient #correct my own perspective by my orientation towards swarm pw problem is that swarm is already swimming away --> center_orient not meaningful
-            if pred_alpha > 0:#np.arctan2(sin(angle_sum), cos(angle_sum)) > 0:
+            self.escape_started = True
+            angle_sum =  pred_alpha - center_orient #correct my own perspective by my orientation towards swarm pw problem is that swarm is already swimming away --> center_orient not meaningful
+            if np.arctan2(sin(angle_sum), cos(angle_sum)) > 0: #pred_alpha > 0:#
                 self.angle_escape = 110 /180*pi #120
             else:
                 self.angle_escape = -110 /180*pi #120
@@ -302,10 +302,10 @@ class Fish():
             phi_des = np.arctan2(sin(angle_sum), cos(angle_sum))
             v_des = 0.02 * min(1, (2 - 2*abs(phi_des)/pi))#make v_des dependend on phi_des : if aligned swim faster, pw choose non linear relation?
             #PW DOES THIS MAKE SENSE?
-            dist_thresh = 500 #mm
+            dist_thresh = 200 #mm
             dist_center = center_pos[0]**2 + center_pos[1]**2
             #print("dist_center",dist_center)
-            if dist_center < dist_thresh**2 and dist_center and self.escape_iteration_count > 60: #if Im close to my friends and i've been escaping already for some time
+            if dist_center < dist_thresh**2 and dist_center and self.escape_iteration_count > 120: #if Im close to my friends and i've been escaping already for some time for normal tank size: 60, find better rule!!
                 print(self.id, "aggregate_and_turn cause at dist:", sqrt(dist_center))
                 self.behavior = "aggregate_and_turn"
             # phi_thresh = 150 /180*pi
@@ -320,7 +320,7 @@ class Fish():
         v_des = 0.02 * (1 - abs(phi_des)/pi)#make v_des dependend on phi_des : if aligned swim faster, pw choose non linear relation?
         phi_aggregating = np.arctan2(center_pos[1], center_pos[0]) #assuming that fish also see their friends on the other side of fountain
         phi_turning = -self.angle_escape/2
-        a = 0.5 #weight aggregation; pw tune
+        a = 0.1 #weight aggregation; pw tune
         b = 1 - a #weight turning
         phi_des = a*phi_aggregating + b*phi_turning
 
@@ -810,7 +810,7 @@ class Fish():
 
         pred_alpha, pred_beta, predator_detected = self.environment.perceive_pred(self.id)
 
-        if self.escaped:
+        if self.escape_started:
             pred_alpha, pred_beta, pred_valpha, pred_vbeta = self.kalman_tracking_predator(pred_alpha, pred_beta)
 
         #print("pred_rel_phi, predator_detected",pred_rel_phi, predatpredator_detectedor_visible)
@@ -828,7 +828,9 @@ class Fish():
             phi_des, v_des = self.aggregate_and_turn(center_pos)
 
         self.home_orient(phi_des, v_des)
-        self.depth_ctrl_vert(center_pos[2])
+        #self.depth_ctrl_vert(center_pos[2])
+        z_des = 1000 # pw as if we had a pressure sensor
+        self.depth_ctrl_vert(z_des-self.environment.pos[self.id][2])
         """ debugging
         self.dorsal = 0
         self.caudal = 0
