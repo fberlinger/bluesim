@@ -26,8 +26,8 @@ import numpy as np
 import random
 import sys
 import time
+import importlib
 
-from fish import Fish
 from predator import Predator
 from environment import Environment
 from dynamics import Dynamics
@@ -57,9 +57,10 @@ def log_meta():
 try:
     experiment_type = sys.argv[1]
 except:
-    print('No experiment description provided, using "unknown"')
-    experiment_type = 'unknown'
-
+    experiment_type = 'fountain'
+    print('No experiment description provided, using as default', experiment_type)
+    
+Fish = getattr(importlib.import_module('fishfood.' + experiment_type), 'Fish') #import Fish class directly from module specified by experiment type
 ## Feel free to loop over multiple simulations with different parameters! ##
 
 # Experimental Parameters
@@ -67,7 +68,11 @@ no_fish = 4
 simulation_time = 200 # [s]
 clock_freq = 2 # [Hz]
 clock_rate = 1/clock_freq
-pred_bool = True
+
+if experiment_type == "fountain":
+    pred_bool = True
+else:
+    pred_bool = False
 
 # Fish Specifications
 v_range=3000 # visual range, [mm]
@@ -78,6 +83,7 @@ fish_specs = (v_range, w_blindspot, r_sphere, n_magnitude)
 
 # Standard Tank
 arena_list = [1780, 1780, 1170]
+arena_list = [4*x for x in arena_list] #pw for fountain more space for now
 arena = np.array(arena_list)
 arena_center = arena / 2.0
 
