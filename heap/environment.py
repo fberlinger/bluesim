@@ -325,29 +325,73 @@ class Environment():
 
     def get_rel_pos_pred(self, source_index):
         """Calculate the relative position from the source node to the predator"""
+        #rel pos
         global_heading = self.pred_pos[:3] - self.pos[source_index][:3]
         phi = self.pos[source_index][3]
         R = np.array([[math.cos(-phi), -math.sin(-phi), 0],[math.sin(-phi), math.cos(-phi), 0],[0,0,1]]) #rotate by phi around z axis to transform from global to robot frame
         robot_heading = R @ np.transpose(global_heading)
 
-        return robot_heading
+        #rel_phi
+        diff = self.pred_pos[3] - phi
+        rel_phi = np.arctan2(math.sin(diff), math.cos(diff))
+        rel_pos_pred = np.append(robot_heading, rel_phi)
+        return rel_pos_pred
 
-    def get_rel_orient_pred(self, source_index):
-        """Calculate the relative orientation of source node and predator """
-        diff = (self.pred_pos[3] - self.pos[source_index][3])
-
-        return np.arctan2(np.sin(diff), np.cos(diff))
-
-    def perceive_pred(self, source_id):
+    def perceive_pred(self, source_id, robots, rel_pos, rel_dist):
         pred_rel_pos = self.get_rel_pos_pred(source_id) #pw: add noise, occlusion etc
-        pred_rel_phi = self.get_rel_orient_pred(source_id)
 
-        #those are the values that I can actually measure on robot, because scale is unknown (predator assumed as only one blob)
-        pred_alpha = []
-        pred_beta = []
-        detected = self.pred_visible# and np.linalg.norm(pred_rel_pos[0:1]) < 2000 #pw within range of 3m to be visible change this?
-        if detected:
-            pred_alpha  = np.arctan2(pred_rel_pos[1], pred_rel_pos[0])
-            pred_beta = np.arctan2(pred_rel_pos[2], math.sqrt(pred_rel_pos[0]**2 + pred_rel_pos[1]**2))
+        #check if pred occluded by other fish
+        occluded = False
+        coord_robot = pred_rel_pos[:3]
+        d_robot = np.linalg.norm(coord_robot)
 
-        return pred_alpha, pred_beta, detected
+        for verified in robots:
+            d_verified = rel_dist[verified]
+            coord_verified = rel_pos[verified,:3]
+
+            theta_min = math.atan(self.r_sphere / d_verified)
+            theta = abs(math.acos(np.dot(coord_robot, coord_verified) / (d_robot * d_verified)))
+
+            if theta < theta_min and d_verified < d_robot:
+                occluded = True
+                #print(source_id, "predator is occluded")
+                break
+
+        #check if pred in blindspot
+        blindspot = False
+        r_blockage = self.w_blindspot/2
+
+        phi = self.pos[source_id,3]
+        phi_xy = [math.cos(phi), math.sin(phi)]
+        mag_phi = np.linalg.norm(phi_xy)
+
+        dot = np.dot(phi_xy, pred_rel_pos[:2])
+        if dot < 0:
+            d_robot = np.linalg.norm(pred_rel_pos[:2])
+            angle = abs(math.acos(dot / (mag_phi * d_robot))) - math.pi / 2 # cos(a-b) = ca*cb+sa*sb = sa
+
+            if math.cos(angle) * d_robot < r_blockage:
+                blindspot = True
+                #print(source_id, "predator in blindspot")
+
+        #check if pred out of visual range
+        out_of_visual_range = False
+        conn_drop = 0.005
+        d_robot =  np.linalg.norm(pred_rel_pos[:3])
+        x = conn_drop * (d_robot - self.v_range)
+        if x < -5:
+            sigmoid = 1
+        elif x > 5:
+            sigmoid = 0
+        else:
+            sigmoid = 1 / (1 + math.exp(x))
+        prob = random.random()
+
+        if sigmoid < prob:
+            out_of_visual_range = True
+
+        detected = self.pred_visible and not (occluded or blindspot or out_of_visual_range)
+        if not detected:
+            pred_rel_pos = np.array([])
+
+        return pred_rel_pos

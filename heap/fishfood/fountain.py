@@ -34,7 +34,7 @@ class Fish():
         self.behavior = 'align' #'aggregate'#pw change back
         self.escape_started = False
         self.pred_undetected_count = 0
-        self.escape_iteration_count = 0
+        #self.escape_iteration_count = 0
         self.angle_escape = []
 
         #kf tracker init, move this to init
@@ -91,31 +91,30 @@ class Fish():
 
         return kf
 
-    def init_kf_pred(self, alpha_init, beta_init):
+    def init_kf_pred(self, pred_xyzphi_init):
         dt = 0.5 #[s]
-        dim_state = 4 #state contains for elements: alpha, beta, valpha, vbeta
-        dim_meas = 2 #only measure pos, not vel
-        dim_input = dim_state - dim_meas #only vel
-        noise_process_alpha = np.pi/8 #[rad]
-        noise_process_beta = np.pi/8 #[rad]
-        noise_process_valpha = np.pi/4 #[rad/s]
-        noise_process_vbeta = np.pi/4 #[rad/s]
-        noise_meas_alpha = np.pi/4 #[rad]
-        noise_meas_beta = np.pi/4 #[rad]
-        covar_init_alpha = np.pi #very unsure at the beginning -->large variance
-        covar_init_beta = np.pi #very unsure at the beginning -->large variance
-        covar_init_valpha = np.pi #very unsure at the beginning -->large variance
-        covar_init_vbeta = np.pi #very unsure at the beginning -->large variance
-        v_init = np.zeros((dim_input)) #zeros velocity at the beginning
+        dim_state = 8 #state contains: x, y, z, phi, vx, vy, vz, vphi
+        dim_meas = 4 #only measure pos, not vel
+        noise_process_xyz = 50 #[mm]
+        noise_process_phi = np.pi/8 #[rad]
+        noise_process_vxyz = 100 #[mm/s]
+        noise_process_vphi = np.pi/4 #[rad/s]
+        noise_meas_xyz = 100 #[mm]
+        noise_meas_phi = np.pi/4 #[rad]
+        covar_init_xyz = 2000 #very unsure at the beginning -->large variance
+        covar_init_phi = np.pi #very unsure at the beginning -->large variance
+        covar_init_vxyz = 2000 #very unsure at the beginning -->large variance
+        covar_init_vphi = np.pi #very unsure at the beginning -->large variance
+        v_init = np.zeros((4)) #zeros velocity at the beginning
 
-        kf = KalmanFilter(dim_x=dim_state, dim_z=dim_meas, dim_u=dim_input)
-        kf.x = np.concatenate((alpha_init, beta_init, v_init), axis=None)[:,np.newaxis]
-        kf.F = np.identity(dim_state) + np.pad(dt*np.identity(dim_meas), ((0, dim_state-dim_meas), (dim_state-dim_meas, 0)), 'constant',constant_values = (0,0)) #transition matrix: assume const vel; PW in BlueSwarm code should F be changed every iteration because dt is not const? Time-varying kf
-        kf.H = np.pad(np.identity(dim_meas), ((0, 0), (0, dim_state-dim_meas)), 'constant',constant_values = (0,0)) #measurement matrix: we measure pos
-        kf.B = np.append(np.zeros((dim_state-dim_input,dim_state-dim_input)), np.identity(dim_input), axis=0) #control matrix: u is directy imu input vel (integrated acc) and v_phi (gyro), so B is zero on position and identity on velocity
-        kf.R = np.diag([noise_meas_alpha, noise_meas_beta]) #measurement noise
-        kf.Q = np.diag([noise_process_alpha, noise_process_beta, noise_process_valpha, noise_process_vbeta]) #process noise #Q_discrete_white_noise(dim=dim_state, dt=dt, var=var_state)
-        kf.P = np.diag([covar_init_alpha, covar_init_beta, covar_init_valpha, covar_init_vbeta]) #estimated initial covariance matrix (a measure of the estimated accuracy of the state estimate)
+        kf = KalmanFilter(dim_x=dim_state, dim_z=dim_meas)#, dim_u=dim_input)
+        kf.x = np.concatenate((pred_xyzphi_init, v_init), axis=None)[:,np.newaxis]
+        kf.F = np.identity(dim_state) + np.pad(dt*np.identity(dim_meas), ((0, 4), (4, 0)), 'constant',constant_values = (0,0)) #transition matrix: assume const vel; PW in BlueSwarm code should F be changed every iteration because dt is not const? Time-varying kalman filter
+        kf.H = np.pad(np.identity(dim_meas), ((0, 0), (0, 4)), 'constant',constant_values = (0,0)) #measurement matrix: we measure pos
+        #kf.B = np.append(np.zeros((4,4)), np.identity(dim_input), axis=0) #control matrix: u is directy imu input vel (integrated acc) and v_phi (gyro), so B is zero on position and identity on velocity
+        kf.R = np.diag([noise_meas_xyz, noise_meas_xyz, noise_meas_xyz, noise_meas_phi]) #measurement noise
+        kf.Q = np.diag([noise_process_xyz, noise_process_xyz, noise_process_xyz, noise_process_phi, noise_process_vxyz, noise_process_vxyz, noise_process_vxyz, noise_process_vphi]) #process noise #Q_discrete_white_noise(dim=dim_state, dt=dt, var=var_state)
+        kf.P = np.diag([covar_init_xyz, covar_init_xyz, covar_init_xyz, covar_init_phi, covar_init_vxyz, covar_init_vxyz, covar_init_vxyz, covar_init_vphi]) #estimated initial covariance matrix (a measure of the estimated accuracy of the state estimate)
 
         return kf
 
@@ -154,7 +153,8 @@ class Fish():
         """(1) Get neighbors from environment, (2) move accordingly, (3) update your state in environment
         """
         robots, rel_pos, dist, leds = self.environment.get_robots(self.id)
-        target_pos, vel = self.move(leds)
+        pred_rel_pos = self.environment.perceive_pred(self.id, robots, rel_pos, dist)
+        target_pos, vel = self.move(leds, pred_rel_pos)
         self.environment.update_states(self.id, target_pos, vel)
 
     def kalman_prediction_update(self):
@@ -238,24 +238,20 @@ class Fish():
         self.log_kf(rel_pos_led1, rel_phi)
         return (rel_pos_led1, rel_phi)
 
-    def kalman_tracking_predator(self, alpha_detection, beta_detection):
-        # vel = np.zeros(2)#self.interaction.perceive_vel(self.id) #in imu we only get acc, this is already integrated once!
-        # movement = np.append(vel, v_phi)[:,np.newaxis]
-
+    def kalman_tracking_predator(self, pred_pos_detection):
         #prediction step
         self.kf_pred.predict()
 
         #measurements
-        if not alpha_detection == []:
-            measured_state = np.append(alpha_detection, beta_detection)
-            self.kf_pred.update(measured_state)
+        if pred_pos_detection.size:
+            self.kf_pred.update(pred_pos_detection)
 
-        return self.kf_pred.x[0], self.kf_pred.x[1], self.kf_pred.x[2], self.kf_pred.x[3]#alpha, beta, valpha, vbeta
+        return self.kf_pred.x[:4].ravel(), self.kf_pred.x[4:].ravel() #(xyz, phi), vel
 
     def aggregate(self, center_pos):
         phi_des = np.arctan2(center_pos[1], center_pos[0])
         v_des = 0.02 * (1 - abs(phi_des)/pi)#make v_des dependend on phi_des : if aligned swim faster, pw choose non linear relation?
-        dist_thresh = 400 #mm
+        dist_thresh = 200 #mm
         dist_center = center_pos[0]**2 + center_pos[1]**2
         #print(self.id, "dist_center",dist_center)
         if dist_center < dist_thresh**2:
@@ -263,13 +259,14 @@ class Fish():
             self.behavior = "align"
         return (phi_des, v_des)
 
-    def align(self, center_orient, pred_alpha, pred_beta, predator_detected):
+    def align(self, center_orient, pred_pos):
         v_des = 0
         phi_des = center_orient
-        if predator_detected and abs(pred_alpha)>pi/2 and not self.escape_started: #if predator is visible and behind me and I havent already done a previous escape maneuver
+        if pred_pos.size and abs(pred_pos[3])<pi/2 and pred_pos[0]<0 and np.linalg.norm(pred_pos[0:2]) < 2000 and not self.escape_started: #if predator is visible and behind me and I havent already done a previous escape maneuver
             self.behavior = "predator_escape"
             print(self.id, "predator_escape")
             self.escape_started = True
+            pred_alpha = np.arctan2(pred_pos[1], pred_pos[0])
             angle_sum =  pred_alpha - center_orient #correct my own perspective by my orientation towards swarm pw problem is that swarm is already swimming away --> center_orient not meaningful
             if np.arctan2(sin(angle_sum), cos(angle_sum)) > 0: #pred_alpha > 0:#
                 self.angle_escape = 110 /180*pi #120
@@ -277,23 +274,22 @@ class Fish():
                 self.angle_escape = -110 /180*pi #120
 
             # init predator kf
-            self.kf_pred = self.init_kf_pred(pred_alpha, pred_beta)
+            self.kf_pred = self.init_kf_pred(pred_pos)
 
         return (phi_des, v_des)
 
-    def predator_escape(self, center_pos, center_orient, pred_alpha, predator_detected):
-        self.escape_iteration_count += 1
-
-        if not predator_detected: #pw change this?
+    def predator_escape(self, center_pos, center_orient, pred_pos):
+        #self.escape_iteration_count += 1
+        if not pred_pos.size:
             phi_des = 0 #wait till we see it again; if not after 5 times, change to aggregation
             v_des = 0
             self.pred_undetected_count += 1
             if self.pred_undetected_count > 3:
-                self.behavior = "aggregate_and_turn"
-                print(self.id, "aggregate_and_turn cause pred not seen")
+                self.behavior = "aggregate"
+                print(self.id, "aggregate cause pred not seen")
         else:
             self.pred_undetected_count = 0
-
+            pred_alpha = np.arctan2(pred_pos[1], pred_pos[0])
             angle_pred_escape = pred_alpha + self.angle_escape
             angle_aggregation = np.arctan2(center_pos[1], center_pos[0])
             weight_escape = 1 #0.7
@@ -301,36 +297,36 @@ class Fish():
             angle_sum = weight_escape*angle_pred_escape + (1-weight_escape)*angle_aggregation
             phi_des = np.arctan2(sin(angle_sum), cos(angle_sum))
             v_des = 0.02 * min(1, (2 - 2*abs(phi_des)/pi))#make v_des dependend on phi_des : if aligned swim faster, pw choose non linear relation?
-            #PW DOES THIS MAKE SENSE?
-            dist_thresh = 200 #mm
+
+            dist_thresh = 500 #mm
             dist_center = center_pos[0]**2 + center_pos[1]**2
             #print("dist_center",dist_center)
-            if dist_center < dist_thresh**2 and dist_center and self.escape_iteration_count > 120: #if Im close to my friends and i've been escaping already for some time for normal tank size: 60, find better rule!!
-                print(self.id, "aggregate_and_turn cause at dist:", sqrt(dist_center))
+
+            if dist_center and dist_center < dist_thresh**2 and abs(pred_pos[3]) > pi*1/3 and pred_pos[3]*pred_alpha > 0:#and abs(pred_phi) < pi*2/3 #same sign alpha and phi #if Im close to my friends and i've been escaping already for some time for normal tank size: 60, find better rule!!
+                print(self.id, "aggregate_and_turn cause at dist:", sqrt(dist_center), "pred phi", pred_pos[3])
                 self.behavior = "aggregate_and_turn"
-            # phi_thresh = 150 /180*pi
-            # if not predator_detected: #abs(pred_rel_phi) > phi_thresh: #or  need tracking to say which way to turn then #pw phi might be hard to determine at all time, use tracking! HOW? CURRENTLY JUST IF I DONT SEE IT ANYMORE THEN REAGGREGATE, otherwise keep swimming away from it DOESNT MAKE SENSE!
-            #     print(self.id, "aggregate_and_turn")
-            #     self.behavior = "aggregate_and_turn"
 
         return (phi_des, v_des)
 
-    def aggregate_and_turn(self, center_pos):
-        phi_des = np.arctan2(center_pos[1], center_pos[0])
-        v_des = 0.02 * (1 - abs(phi_des)/pi)#make v_des dependend on phi_des : if aligned swim faster, pw choose non linear relation?
-        phi_aggregating = np.arctan2(center_pos[1], center_pos[0]) #assuming that fish also see their friends on the other side of fountain
-        phi_turning = -self.angle_escape/2
-        a = 0.1 #weight aggregation; pw tune
-        b = 1 - a #weight turning
-        phi_des = a*phi_aggregating + b*phi_turning
+    def aggregate_and_turn(self, center_pos, center_orient, pred_pos):
+        phi_aggregating = np.arctan2(center_pos[1], center_pos[0])
 
-        dist_thresh = 200 #mm
+        if not pred_pos.size:
+            phi_des = phi_aggregating
+        else:
+            phi_turning = pred_pos[3]
+            a = 0.5 #weight aggregation; pw tune
+            b = 1 - a #weight turning
+            phi_des = a*phi_aggregating + b*phi_turning
+
+        dist_thresh = 100 #mm
         dist_center = center_pos[0]**2 + center_pos[1]**2
         #print("dist_center",dist_center)
         if dist_center < dist_thresh**2:
             print(self.id, "aligning")
             self.behavior = "align"
 
+        v_des = 0.02 * (1 - abs(phi_des)/pi)
         return (phi_des, v_des)
 
     def comp_center_orient(self, rel_orient): # pw added
@@ -789,7 +785,7 @@ class Fish():
         # else:
             # self.caudal = 0
 
-    def move(self, detected_blobs):
+    def move(self, detected_blobs, pred_pos):
         """Decision-making based on neighboring robots and corresponding move
         """
         self.it_counter += 1
@@ -808,24 +804,20 @@ class Fish():
         center_orient = self.comp_center_orient(rel_phi)
         center_pos = self.comp_center_pos(rel_pos_led1)
 
-        pred_alpha, pred_beta, predator_detected = self.environment.perceive_pred(self.id)
-
         if self.escape_started:
-            pred_alpha, pred_beta, pred_valpha, pred_vbeta = self.kalman_tracking_predator(pred_alpha, pred_beta)
-
-        #print("pred_rel_phi, predator_detected",pred_rel_phi, predatpredator_detectedor_visible)
+            pred_pos, pred_vel = self.kalman_tracking_predator(pred_pos)
 
         if self.behavior == "aggregate":
             phi_des, v_des = self.aggregate(center_pos)
 
         if self.behavior == "align":
-            phi_des, v_des = self.align(center_orient, pred_alpha, pred_beta, predator_detected)
+            phi_des, v_des = self.align(center_orient, pred_pos)
 
         if self.behavior == "predator_escape":
-            phi_des, v_des = self.predator_escape(center_pos, center_orient, pred_alpha, predator_detected)
+            phi_des, v_des = self.predator_escape(center_pos, center_orient, pred_pos)
 
         if self.behavior == "aggregate_and_turn":
-            phi_des, v_des = self.aggregate_and_turn(center_pos)
+            phi_des, v_des = self.aggregate_and_turn(center_pos, center_orient, pred_pos)
 
         self.home_orient(phi_des, v_des)
         #self.depth_ctrl_vert(center_pos[2])

@@ -34,11 +34,11 @@ class Predator():
             phi_mean_cos += np.cos(value)
 
         #calc mean and std
-        phi_mean_cos = phi_mean_cos/len(phi_array)
-        phi_mean_sin = phi_mean_sin/len(phi_array)
+        phi_mean_cos = phi_mean_cos/np.size(phi_array, 0)
+        phi_mean_sin = phi_mean_sin/np.size(phi_array, 0)
         phi_mean = np.arctan2(phi_mean_sin, phi_mean_cos)
         phi_std = np.sqrt(-np.log(phi_mean_sin**2 + phi_mean_cos**2))
-        #print("fish_phi_mean",fish_phi_mean, "fish_phi_std", fish_phi_std)
+        #print("fish_phi_mean",phi_mean, "fish_phi_std", phi_std)
 
         return phi_mean, phi_std
 

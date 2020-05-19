@@ -65,7 +65,7 @@ Fish = getattr(importlib.import_module('fishfood.' + experiment_type), 'Fish') #
 
 # Experimental Parameters
 no_fish = 10
-simulation_time = 400 # [s]
+simulation_time = 330 # [s]
 clock_freq = 2 # [Hz]
 clock_rate = 1/clock_freq
 
@@ -83,7 +83,7 @@ fish_specs = (v_range, w_blindspot, r_sphere, n_magnitude)
 
 # Standard Tank
 arena_list = [1780, 1780, 1170]
-arena_list = [4*x for x in arena_list] #pw for fountain more space for now
+arena_list = [2*x for x in arena_list] #pw for fountain more space for now
 arena = np.array(arena_list)
 arena_center = arena / 2.0
 
@@ -153,3 +153,5 @@ log_meta()
 print('Simulation data got saved in ./logfiles/{}_data.txt,\nand corresponding experimental info in ./logfiles/{}_meta.txt.\n -'.format(filename, filename))
 print('Create corresponding animation by running >python animation.py {}'.format(filename))
 print('#### GOODBYE AND SEE YOU SOON AGAIN ####')
+
+
