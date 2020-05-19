@@ -28,7 +28,7 @@ class Fish():
     def run(self):
         """(1) Get neighbors from environment, (2) move accordingly, (3) update your state in environment
         """
-        robots, rel_pos, dist = self.environment.get_robots(self.id)
+        robots, rel_pos, dist, leds = self.environment.get_robots(self.id)
         target_pos, vel = self.move(robots, rel_pos, dist)
         self.environment.update_states(self.id, target_pos, vel)
 
