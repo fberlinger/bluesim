@@ -33,38 +33,28 @@ from dynamics import Dynamics
 from lib_heap import Heap
 
 
-def exp_rv(param):
-    """Draws a uniform random number between 0 and 1 and returns an exponentially distributed random number with parameter param.
-
-    Args:
-        param (float): Parameter of exponentially distributed random number
-
-    Returns:
-        float: Exponentially distributed random number
-    """
-    x = random.random()
-    return -math.log(1-x)/param
-
 def log_meta():
     """Logs the meta data of the experiment
     """
-    meta = {'Experiment': experiment_type, 'Number of fishes': no_fish, 'Simulation time [s]': simulation_time, 'Clock frequency [Hz]': clock_freq, 'Arena [mm]': arena_list, 'Visual range [mm]': v_range, 'Width of blindspot [mm]': w_blindspot, 'Radius of blocking sphere [mm]': r_sphere, 'Visual noise magnitude [% of distance]': n_magnitude}
+    meta = {'Experiment': experiment_file, 'Number of fishes': no_fish, 'Simulation time [s]': simulation_time, 'Clock frequency [Hz]': clock_freq, 'Arena [mm]': arena_list, 'Visual range [mm]': v_range, 'Width of blindspot [mm]': w_blindspot, 'Radius of blocking sphere [mm]': r_sphere, 'Visual noise magnitude [% of distance]': n_magnitude}
     with open('./logfiles/{}_meta.txt'.format(filename), 'w') as f:
         json.dump(meta, f, indent=2)
 
 # Read Experiment Description
 try:
-    experiment_type = sys.argv[1]
+    experiment_file = sys.argv[1]
 except:
-    print('Please provide a description of this experiment, e.g.:\n >python main.py milling')
+    print('Please provide the filename of the experiment you want to simulate, e.g.:\n >python simulation.py dispersion')
     sys.exit()
 
-Fish = getattr(importlib.import_module('fishfood.' + experiment_type), 'Fish') #import Fish class directly from module specified by experiment type
+#import Fish class directly from module specified by experiment type
+Fish = getattr(importlib.import_module('fishfood.' + experiment_file), 'Fish') 
+
 ## Feel free to loop over multiple simulations with different parameters! ##
 
 # Experimental Parameters
-no_fish = 20
-simulation_time = 10 # [s]
+no_fish = 50
+simulation_time = 60 # [s]
 clock_freq = 2 # [Hz]
 clock_rate = 1/clock_freq
 
@@ -72,7 +62,7 @@ clock_rate = 1/clock_freq
 v_range=3000 # visual range, [mm]
 w_blindspot=50 # width of blindspot, [mm]
 r_sphere=50 # radius of blocking sphere for occlusion, [mm]
-n_magnitude=0 # visual noise magnitude, [% of distance]
+n_magnitude=0.1 # visual noise magnitude, [% of distance]
 fish_specs = (v_range, w_blindspot, r_sphere, n_magnitude)
 
 # Standard Tank
@@ -85,18 +75,18 @@ initial_spread = 500
 pos = np.zeros((no_fish, 4))
 vel = np.zeros((no_fish, 4))
 pos[:,:2] = initial_spread * (np.random.rand(no_fish, 2) - 0.5) + arena_center[:2] # x,y
-pos[:,2] = 10 * np.random.rand(1, no_fish) # z, all fish a same noise-free depth results in LJ lock
+pos[:,2] = 10 * np.random.rand(1, no_fish) # z, all fish at same noise-free depth results in LJ lock
 pos[:,3] = 2*math.pi * (np.random.rand(1, no_fish) - 0.5) # phi
 
 # Create Environment, Dynamics, And Heap
 environment = Environment(pos, vel, fish_specs, arena)
-dynamics = Dynamics(environment, clock_freq)
+dynamics = Dynamics(environment)
 H = Heap(no_fish)
 
 # Create Fish Instances And Insert Into Heap
 fishes = []
 for fish_id in range(no_fish):
-    clock = exp_rv(clock_rate)
+    clock = random.gauss(clock_rate, 0.1*clock_rate)
     fishes.append(Fish(fish_id, dynamics, environment))
     H.insert(fish_id, clock)
 
@@ -117,9 +107,9 @@ while True:
             break
 
     (uuid, event_time) = H.delete_min()
-    fishes[uuid].run()
-    next_clock = event_time + exp_rv(clock_rate)
-    H.insert(uuid, next_clock)
+    duration = random.gauss(clock_rate, 0.1*clock_rate)
+    fishes[uuid].run(duration)
+    H.insert(uuid, event_time + duration)
 
     steps += 1
 

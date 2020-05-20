@@ -4,9 +4,10 @@ import math
 import random
 import numpy as np
 from scipy.spatial.distance import cdist
-
+import sys
 U_LED_DX = 86 # [mm] leds x-distance on BlueBot
 U_LED_DZ = 86 # [mm] leds z-distance on BlueBot
+
 class Environment():
     """Simulated fish environment
     
@@ -27,41 +28,21 @@ class Environment():
         self.no_robots = self.pos.shape[0]
         self.no_states = self.pos.shape[1]
 
-        # Init leds
-        self.leds_pos = [np.zeros((3,3))]*np.size(self.pos,0) #empty init, filled with update_leds() below
-        for i in range(np.shape(self.pos)[0]):
-            self.update_leds(i)
-
         # Initialize robot states
         self.init_states()
 
         # Initialize tracking
         self.init_tracking()
 
+        # Initialize LEDs
+        self.leds_pos = [np.zeros((3,3))]*self.no_robots # empty init, filled with update_leds() below
+        for robot in range(self.no_robots):
+            self.update_leds(robot)
+
     def log_to_file(self, filename):
         """Logs tracking data to file
         """
         np.savetxt('./logfiles/{}_data.txt'.format(filename), self.tracking, fmt='%.2f', delimiter=',')
-
-    def update_leds(self, source_index):
-        """ Updates the position of the three leds based on self.pos, which is the position of led1
-        """
-        pos = self.pos[source_index][0:3]
-        phi = self.pos[source_index][3]
-
-        x1 = pos[0]
-        x2 = x1
-        x3 = x1 + math.cos(phi)*U_LED_DX
-
-        y1 = pos[1]
-        y2 = y1
-        y3 = y1 + math.sin(phi)*U_LED_DX
-
-        z1 = pos[2]
-        z2 = z1 + U_LED_DZ
-        z3 = z1
-
-        self.leds_pos[source_index] = np.array([[x1, x2, x3],[y1, y2, y3],[z1, z2, z3]])
 
     def init_tracking(self):
         """Initializes tracking
@@ -79,6 +60,26 @@ class Environment():
         current_state = np.concatenate((pos,vel), axis=1)
         self.tracking = np.concatenate((self.tracking,current_state), axis=0)
     
+    def update_leds(self, source_index):
+        """ Updates the position of the three leds based on self.pos, which is the position of led1
+        """
+        pos = self.pos[source_index,:3]
+        phi = self.pos[source_index,3]
+
+        x1 = pos[0]
+        x2 = x1
+        x3 = x1 + math.cos(phi)*U_LED_DX
+
+        y1 = pos[1]
+        y2 = y1
+        y3 = y1 + math.sin(phi)*U_LED_DX
+
+        z1 = pos[2]
+        z2 = z1 + U_LED_DZ
+        z3 = z1
+
+        self.leds_pos[source_index] = np.array([[x1, x2, x3],[y1, y2, y3],[z1, z2, z3]])
+
     def init_states(self):
         """Initializes fish positions and velocities
         """
@@ -119,14 +120,14 @@ class Environment():
         self.dist[source_id,:] = dist
         self.dist[:,source_id] = dist.T
 
+        # Update LEDs
+        self.update_leds(source_id)
+
         # Update tracking
         self.updates += 1
         if self.updates >= self.no_robots:
             self.updates = 0
             self.update_tracking()
-
-        # Update leds
-        self.update_leds(source_id)
 
     def get_robots(self, source_id, visual_noise=False):
         """Provides visible neighbors and relative positions and distances to a fish
@@ -190,8 +191,7 @@ class Environment():
     def occlusions(self, source_id, robots, rel_pos):
         """Omits invisible fishes occluded by others
         """
-        if not robots:
-            return
+
 
         rel_dist = self.dist[source_id]
         id_by_dist = np.argsort(rel_dist)
@@ -226,7 +226,7 @@ class Environment():
     def visual_noise(self, source_id, rel_pos):
         """Adds visual noise
         """
-        magnitudes = self.m_magnitude * np.array([self.dist[source_id]]).T # 10% of distance
+        magnitudes = self.n_magnitude * np.array([self.dist[source_id]]).T
         noise = magnitudes * (np.random.rand(self.no_robots, self.no_states) - 0.5) # zero-mean uniform noise
         n_rel_pos = rel_pos + noise
         n_dist = np.linalg.norm(n_rel_pos[:,:3], axis=1) # new dist without phi
@@ -268,7 +268,7 @@ class Environment():
         """
         refl_list = []
         for led in leds_list:
-            if led[2] > 10: #at least 10mm below surface to have a reflection
+            if led[2] > 10: # at least 10 mm below surface to have a reflection
                 refl = led + np.array([0,0, -2*led[2]])
                 refl_list.append(refl)
         return refl_list
@@ -276,24 +276,29 @@ class Environment():
     def calc_relative_leds(self, source_id, robots):
         """Calculates the relative position of all detectable leds and adds their reflection if add_reflections boolean is set to True
         """
-        add_reflections = False
+        if not robots:
+            return np.empty((3,0))
+
+        add_reflections = True
         all_blobs = np.empty((3,0))
+        
+        leds = []
+        for robot in robots:
+            leds.append(self.leds_pos[robot])
 
-        leds = [x for i,x in enumerate(self.leds_pos) if i in robots] #only take leds of those fish that I can see
-        if leds:
-            leds_list = list(np.transpose(np.hstack(leds)))
-            if add_reflections:
-                refl_list = self.calc_reflections(leds_list)
-                leds_list = leds_list + refl_list
+        leds_list = list(np.transpose(np.hstack(leds)))
+        if add_reflections:
+            refl_list = self.calc_reflections(leds_list)
+            leds_list = leds_list + refl_list
 
-            my_pos = self.pos[source_id][0:3]
-            my_phi = self.pos[source_id][3]
-            R = np.array([[math.cos(-my_phi), -math.sin(-my_phi), 0],[math.sin(-my_phi), math.cos(-my_phi), 0],[0,0,1]])# rotate into my coord system
+        my_pos = self.pos[source_id,:3]
+        my_phi = self.pos[source_id,3]
+        R = self.rot_global_to_robot(my_phi)
 
-            for led in leds_list:
-                relative_coordinates = np.dot(R, ((led - my_pos)[:, np.newaxis]))
-                relative_coordinates = relative_coordinates/np.linalg.norm(relative_coordinates)#normalize from xyz to pqr
-                all_blobs = np.append(all_blobs, relative_coordinates, axis=1)
+        for led in leds_list:
+            relative_coordinates = R @ ((led - my_pos)[:, np.newaxis])
+            relative_coordinates /= np.linalg.norm(relative_coordinates) # normalize from xyz to pqr
+            all_blobs = np.append(all_blobs, relative_coordinates, axis=1)
 
-        p = np.random.permutation(np.shape(all_blobs)[1]) #mix up into random order
+        p = np.random.permutation(np.shape(all_blobs)[1]) # mix up into random order
         return all_blobs[:,p]

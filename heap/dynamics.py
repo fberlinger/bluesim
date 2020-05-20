@@ -7,13 +7,10 @@ class Dynamics():
     """Simulates the dynamics of BlueBot with Euler integration according to its equations of motion.
     """
 
-    def __init__(self, environment, clock_freq=1):
+    def __init__(self, environment):
         self.environment = environment
-
-        # Simulation Step and Time
-        self.deltat = 0.05 # [s]
-        self.p_simu = 1 / clock_freq # [s]
-
+        self.steps = 10
+        
         # Robot Specs
         self.rho = 998 # [kg/m^3], water density
         self.l_robot = 0.150 # [m], including fin
@@ -60,9 +57,11 @@ class Dynamics():
         self.F_PL = pect_l * F_PL_max
         self.F_dors = dorsal * F_dors_max
 
-    def simulate_move(self, source_id):
+    def simulate_move(self, source_id, duration):
         """Simulates move starting from current global coordinates based on current velocities and fin control. Returns next global coordinates.
         """
+        deltat = duration / self.steps
+
         mm_to_m = 1/1000 # millimeter (environment) to meter (here)
         m_to_mm = 1000 # meter (here) to millimeter (environment)
 
@@ -79,7 +78,7 @@ class Dynamics():
         vy = r_Pdot_r[1]
         vz = r_Pdot_r[2]
 
-        for t in range(int(self.p_simu/self.deltat)): # int rounds down
+        for step in range(self.steps):
             # Equations of Motion
             x_dot = vx
             y_dot = vy
@@ -99,17 +98,17 @@ class Dynamics():
             vphi_dot = 1/self.I_robot * (self.pect_dist*cos(self.pect_angle)*self.F_PL - self.pect_dist*cos(self.pect_angle)*self.F_PR - 1/2*self.rho*self.C_dphi*self.A_phi*np.sign(phi_dot)*(self.l_robot/6*phi_dot)**2)
 
             # Euler Integration
-            vx = x_dot + self.deltat*vx_dot
-            vy = y_dot + self.deltat*vy_dot
-            vz = z_dot + self.deltat*vz_dot
+            vx = x_dot + deltat*vx_dot
+            vy = y_dot + deltat*vy_dot
+            vz = z_dot + deltat*vz_dot
 
-            phi = phi + self.deltat*phi_dot
-            vphi = phi_dot + self.deltat*vphi_dot
+            phi = phi + deltat*phi_dot
+            vphi = phi_dot + deltat*vphi_dot
 
             # Robot to Global Transformation
             g_T_r = self.environment.rot_robot_to_global(phi)
             g_Pdot_r = g_T_r @ np.array([vx, vy, vz])
-            g_P_r = g_P_r + self.deltat*np.transpose(g_Pdot_r)
+            g_P_r = g_P_r + deltat*np.transpose(g_Pdot_r)
 
         # Conversion to millimeter and appendage of phi and vphi
         pos = np.concatenate((m_to_mm * g_P_r, np.array([phi])), axis=0)
