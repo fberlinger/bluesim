@@ -77,8 +77,8 @@ data = np.loadtxt('./logfiles/yymmdd_hhmmss_data.txt', delimiter=','),
 and can be sliced for looking at a particular fish `i`, or instance in time `t` as follows:
 
 ```
-pos_i = data[:, no_fishes*i : no_fishes*i+4]
-vel_i = data[:, no_fishes+no_fishes*i : no_fishes+no_fishes*i+4]
+pos_i = data[:, 4*i : 4*i+4]
+vel_i = data[:, 4*no_fishes+4*i : 4*no_fishes+4*i+4]
 
 pos_t = data[t, :no_fishes*4]
 vel_t = data[t, no_fishes*4:]
