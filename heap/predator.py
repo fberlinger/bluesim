@@ -16,8 +16,7 @@ class Predator():
         self.environment = environment
 
         self.hunt_started = False
-        self.deltat = 0.5 #pw dont hardcode!!!
-        self.pred_max_speed = 30 #[mm/s] pw adapt
+        self.dt = 1/self.environment.clock_freq 
         self.pred_phi = 0
 
     def run(self):
@@ -72,7 +71,7 @@ class Predator():
             self.environment.pred_pos[3] = 0
 
     def simulate_predator_move(self, pred_speed, pred_phi):
-        delta_dist = pred_speed*self.deltat
+        delta_dist = pred_speed*self.dt
         pred_dir = np.array([np.cos(pred_phi), np.sin(pred_phi), 0])
 
         self.environment.pred_pos[:3] += delta_dist * pred_dir
@@ -86,7 +85,7 @@ class Predator():
 
         if self.hunt_started:
             if self.environment.pred_visible:
-                self.simulate_predator_move(self.pred_max_speed, self.pred_phi) #pw check dt
+                self.simulate_predator_move(self.environment.pred_speed, self.pred_phi) #pw check dt
 
         else:
             fish_phi_mean, fish_phi_std = self.calc_phi_mean_std()

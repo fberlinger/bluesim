@@ -14,7 +14,7 @@ class Environment():
     Fish get their visible neighbors and corresponding relative positions and distances from here. Fish also update their own positions after moving in here. Environmental tracking data is used for simulation analysis.
     """
 
-    def __init__(self, pos, vel, fish_specs, arena, pred_bool):
+    def __init__(self, pos, vel, fish_specs, arena, pred_bool, clock_freq):
         # Arguments
         self.pos = pos # x, y, z, phi; [no_robots X 4]
         self.vel = vel # pos_dot
@@ -22,9 +22,16 @@ class Environment():
         self.w_blindspot = fish_specs[1] # width of blindspot, [mm]
         self.r_sphere = fish_specs[2] # radius of blocking sphere for occlusion, [mm]
         self.n_magnitude = fish_specs[3] # visual noise magnitude, [% of distance]
+        self.surface_reflections = fish_specs[4] # boolean to activate surface reflections
         self.arena_size = arena # x, y, z
         self.pred_bool = pred_bool
+        self.clock_freq = clock_freq
 
+        if pred_bool:
+            self.escape_angle = fish_specs[5] # escape angle for fish, [rad]
+            self.pred_speed = fish_specs[6] # predator speed, [mm/s]
+
+        self.fish_factor_speed = fish_specs[7] #slow down fish from max speed with this factor
         # Parameters
         self.no_robots = self.pos.shape[0]
         self.no_states = self.pos.shape[1]
@@ -297,14 +304,12 @@ class Environment():
         Returns:
             tuple: all_blobs (that are valid, i.e. not duplicates) and their all_angles
         """
-        add_reflections = False
         all_blobs = np.empty((3,0))
-
         leds = [x for i,x in enumerate(self.leds_pos) if i in robots]#!= source_id]   #ignore my own leds and only take leds of fish that I can see
         if leds:
             leds_list = list(np.transpose(np.hstack(leds)))
 
-            if add_reflections:
+            if self.surface_reflections:
                 refl_list = self.calc_reflections(leds_list)
                 leds_list = leds_list + refl_list
             #print("leds_list",len(leds_list),leds_list)

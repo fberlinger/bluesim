@@ -33,9 +33,10 @@ class Fish():
         self.it_counter = 0
         self.behavior = 'align' #'aggregate'#pw change back
         self.escape_started = False
+        self.pred_started = False
         self.pred_undetected_count = 0
-        #self.escape_iteration_count = 0
-        self.angle_escape = []
+        self.escape_angle = self.environment.escape_angle
+        self.dt = 1/self.environment.clock_freq
 
         #kf tracker init, move this to init
         self.kf_array = []
@@ -46,7 +47,6 @@ class Fish():
         self.kf_phi_rotations = np.empty(0, dtype=int)
         self.kf_phi_prev = np.empty(0)
 
-
         # Logger instance
         for filename in glob.glob("./logfiles/kf*"): #remove all previous files
             os.remove(filename)
@@ -56,7 +56,6 @@ class Fish():
             f.write('TRACK_ID, ITERATION, X, Y, Z, PHI \n')
 
     def init_kf(self, xyz_init, phi_init):
-        dt = 0.5 #[s]#pw measure this!!!
         dim_state = 8
         dim_meas = 4 #only measure pos, not vel
         #dim_input = dim_state - dim_meas #only vel
@@ -74,7 +73,7 @@ class Fish():
 
         kf = KalmanFilter(dim_x=dim_state, dim_z=dim_meas)#, dim_u=dim_input)
         kf.x = np.concatenate((xyz_init, phi_init, v_init), axis=None)[:,np.newaxis]
-        kf.F = np.identity(dim_state) + np.pad(dt*np.identity(dim_meas), ((0, 4), (4, 0)), 'constant',constant_values = (0,0)) #transition matrix: assume const vel; PW in BlueSwarm code should F be changed every iteration because dt is not const? Time-varying kalman filter
+        kf.F = np.identity(dim_state) + np.pad(self.dt*np.identity(dim_meas), ((0, 4), (4, 0)), 'constant',constant_values = (0,0)) #transition matrix: assume const vel; PW in BlueSwarm code should F be changed every iteration because dt is not const? Time-varying kalman filter
         kf.H = np.pad(np.identity(dim_meas), ((0, 0), (0, 4)), 'constant',constant_values = (0,0)) #measurement matrix: we measure pos
         #kf.B = np.append(np.zeros((4,4)), np.identity(dim_input), axis=0) #control matrix: u is directy imu input vel (integrated acc) and v_phi (gyro), so B is zero on position and identity on velocity
         kf.R = np.diag([noise_meas_xyz, noise_meas_xyz, noise_meas_xyz, noise_meas_phi]) #measurement noise
@@ -92,7 +91,6 @@ class Fish():
         return kf
 
     def init_kf_pred(self, pred_xyzphi_init):
-        dt = 0.5 #[s]
         dim_state = 8 #state contains: x, y, z, phi, vx, vy, vz, vphi
         dim_meas = 4 #only measure pos, not vel
         noise_process_xyz = 50 #[mm]
@@ -109,7 +107,7 @@ class Fish():
 
         kf = KalmanFilter(dim_x=dim_state, dim_z=dim_meas)#, dim_u=dim_input)
         kf.x = np.concatenate((pred_xyzphi_init, v_init), axis=None)[:,np.newaxis]
-        kf.F = np.identity(dim_state) + np.pad(dt*np.identity(dim_meas), ((0, 4), (4, 0)), 'constant',constant_values = (0,0)) #transition matrix: assume const vel; PW in BlueSwarm code should F be changed every iteration because dt is not const? Time-varying kalman filter
+        kf.F = np.identity(dim_state) + np.pad(self.dt*np.identity(dim_meas), ((0, 4), (4, 0)), 'constant',constant_values = (0,0)) #transition matrix: assume const vel; PW in BlueSwarm code should F be changed every iteration because dt is not const? Time-varying kalman filter
         kf.H = np.pad(np.identity(dim_meas), ((0, 0), (0, 4)), 'constant',constant_values = (0,0)) #measurement matrix: we measure pos
         #kf.B = np.append(np.zeros((4,4)), np.identity(dim_input), axis=0) #control matrix: u is directy imu input vel (integrated acc) and v_phi (gyro), so B is zero on position and identity on velocity
         kf.R = np.diag([noise_meas_xyz, noise_meas_xyz, noise_meas_xyz, noise_meas_phi]) #measurement noise
@@ -133,7 +131,7 @@ class Fish():
         """
         self.is_started = False
 
-    def log_kf(self, rel_pos, rel_orient):
+    def log_kf(self, rel_pos, rel_orient, pred_pos):
         """Log current state
         """
         with open('./logfiles/kf_{}.csv'.format(self.id), 'a+') as f:
@@ -146,6 +144,18 @@ class Fish():
                         rel_pos[i][1],
                         rel_pos[i][2],
                         rel_orient[i]
+                    )
+                )
+            #predator
+            if pred_pos.size:
+                f.write(
+                    '{}, {}, {}, {}, {}, {}\n'.format(
+                        1000,
+                        self.it_counter,
+                        pred_pos[0],
+                        pred_pos[1],
+                        pred_pos[2],
+                        pred_pos[3]
                     )
                 )
 
@@ -235,7 +245,6 @@ class Fish():
             phi_bounded = np.arctan2(sin(estimated_state[3]), cos(estimated_state[3]))
             rel_phi.append(phi_bounded)
         #print("rel_pos_led1", rel_pos_led1)
-        self.log_kf(rel_pos_led1, rel_phi)
         return (rel_pos_led1, rel_phi)
 
     def kalman_tracking_predator(self, pred_pos_detection):
@@ -246,11 +255,31 @@ class Fish():
         if pred_pos_detection.size:
             self.kf_pred.update(pred_pos_detection)
 
-        return self.kf_pred.x[:4].ravel(), self.kf_pred.x[4:].ravel() #(xyz, phi), vel
+        return self.kf_pred.x[:4].ravel() #(xyz, phi)
+
+    def kalman_update_predator(self, pred_pos):
+        if pred_pos.size:
+            self.pred_undetected_count = 0
+            if not self.pred_started:
+                # init predator kf
+                self.kf_pred = self.init_kf_pred(pred_pos)
+                self.pred_started = True
+
+        elif not pred_pos.size and self.pred_started:
+            self.pred_undetected_count += 1
+            if self.pred_undetected_count > 20:
+                self.pred_started = False
+                self.behavior = "aggregate"
+                print(self.id, "aggregate cause pred not seen")
+
+        if self.pred_started:
+            pred_pos = self.kalman_tracking_predator(pred_pos)
+
+        return pred_pos
 
     def aggregate(self, center_pos):
         phi_des = np.arctan2(center_pos[1], center_pos[0])
-        v_des = 0.02 * (1 - abs(phi_des)/pi)#make v_des dependend on phi_des : if aligned swim faster, pw choose non linear relation?
+        v_des = (1 - abs(phi_des)/pi)#make v_des dependend on phi_des : if aligned swim faster, pw choose non linear relation?
         dist_thresh = 200 #mm
         dist_center = center_pos[0]**2 + center_pos[1]**2
         #print(self.id, "dist_center",dist_center)
@@ -268,43 +297,28 @@ class Fish():
             self.escape_started = True
             pred_alpha = np.arctan2(pred_pos[1], pred_pos[0])
             angle_sum =  pred_alpha - center_orient #correct my own perspective by my orientation towards swarm pw problem is that swarm is already swimming away --> center_orient not meaningful
-            if np.arctan2(sin(angle_sum), cos(angle_sum)) > 0: #pred_alpha > 0:#
-                self.angle_escape = 110 /180*pi #120
-            else:
-                self.angle_escape = -110 /180*pi #120
-
-            # init predator kf
-            self.kf_pred = self.init_kf_pred(pred_pos)
+            if np.arctan2(sin(angle_sum), cos(angle_sum)) < 0:
+                self.escape_angle *= -1
 
         return (phi_des, v_des)
 
     def predator_escape(self, center_pos, center_orient, pred_pos):
-        #self.escape_iteration_count += 1
-        if not pred_pos.size:
-            phi_des = 0 #wait till we see it again; if not after 5 times, change to aggregation
-            v_des = 0
-            self.pred_undetected_count += 1
-            if self.pred_undetected_count > 3:
-                self.behavior = "aggregate"
-                print(self.id, "aggregate cause pred not seen")
-        else:
-            self.pred_undetected_count = 0
-            pred_alpha = np.arctan2(pred_pos[1], pred_pos[0])
-            angle_pred_escape = pred_alpha + self.angle_escape
-            angle_aggregation = np.arctan2(center_pos[1], center_pos[0])
-            weight_escape = 1 #0.7
+        pred_alpha = np.arctan2(pred_pos[1], pred_pos[0])
+        angle_pred_escape = pred_alpha + self.escape_angle
+        angle_aggregation = np.arctan2(center_pos[1], center_pos[0])
+        weight_escape = 1 #0.7
 
-            angle_sum = weight_escape*angle_pred_escape + (1-weight_escape)*angle_aggregation
-            phi_des = np.arctan2(sin(angle_sum), cos(angle_sum))
-            v_des = 0.02 * min(1, (2 - 2*abs(phi_des)/pi))#make v_des dependend on phi_des : if aligned swim faster, pw choose non linear relation?
+        angle_sum = weight_escape*angle_pred_escape + (1-weight_escape)*angle_aggregation
+        phi_des = np.arctan2(sin(angle_sum), cos(angle_sum))
+        v_des = min(1, (2 - 2*abs(phi_des)/pi))#make v_des dependend on phi_des : if aligned swim faster, pw choose non linear relation?
 
-            dist_thresh = 500 #mm
-            dist_center = center_pos[0]**2 + center_pos[1]**2
-            #print("dist_center",dist_center)
+        dist_thresh = 500 #mm
+        dist_center = center_pos[0]**2 + center_pos[1]**2
+        #print("dist_center",dist_center)
 
-            if dist_center and dist_center < dist_thresh**2 and abs(pred_pos[3]) > pi*1/3 and pred_pos[3]*pred_alpha > 0:#and abs(pred_phi) < pi*2/3 #same sign alpha and phi #if Im close to my friends and i've been escaping already for some time for normal tank size: 60, find better rule!!
-                print(self.id, "aggregate_and_turn cause at dist:", sqrt(dist_center), "pred phi", pred_pos[3])
-                self.behavior = "aggregate_and_turn"
+        if dist_center and dist_center < dist_thresh**2 and abs(pred_pos[3]) > pi*1/3 and pred_pos[3]*pred_alpha > 0:#and abs(pred_phi) < pi*2/3 #same sign alpha and phi #if Im close to my friends and i've been escaping already for some time for normal tank size: 60, find better rule!!
+            print(self.id, "aggregate_and_turn cause at dist:", sqrt(dist_center), "pred phi", pred_pos[3])
+            self.behavior = "aggregate_and_turn"
 
         return (phi_des, v_des)
 
@@ -315,18 +329,18 @@ class Fish():
             phi_des = phi_aggregating
         else:
             phi_turning = pred_pos[3]
-            a = 0.5 #weight aggregation; pw tune
+            a = 0.3 #weight aggregation; pw tune
             b = 1 - a #weight turning
             phi_des = a*phi_aggregating + b*phi_turning
 
-        dist_thresh = 100 #mm
+        dist_thresh = 50 #mm
         dist_center = center_pos[0]**2 + center_pos[1]**2
         #print("dist_center",dist_center)
         if dist_center < dist_thresh**2:
             print(self.id, "aligning")
             self.behavior = "align"
 
-        v_des = 0.02 * (1 - abs(phi_des)/pi)
+        v_des = (1 - abs(phi_des)/pi)
         return (phi_des, v_des)
 
     def comp_center_orient(self, rel_orient): # pw added
@@ -759,6 +773,7 @@ class Fish():
             phi_des (np.array): Relative position of desired goal location in robot frame.
             v_des: desired linear velocity in phi direction
         """
+        v_des *= self.environment.fish_factor_speed #slow down by this factor (before the v_des sould already be in range -1,1)
         v_des = np.clip(v_des, -1, 1) #should already be in range -1,1
         F_P_max = 0.006 # [N] according to dynamics.py file
         F_caud_max = 0.020 # [N]
@@ -804,8 +819,9 @@ class Fish():
         center_orient = self.comp_center_orient(rel_phi)
         center_pos = self.comp_center_pos(rel_pos_led1)
 
-        if self.escape_started:
-            pred_pos, pred_vel = self.kalman_tracking_predator(pred_pos)
+        pred_pos = self.kalman_update_predator(pred_pos)
+
+        self.log_kf(rel_pos_led1, rel_phi, pred_pos)
 
         if self.behavior == "aggregate":
             phi_des, v_des = self.aggregate(center_pos)
@@ -825,7 +841,7 @@ class Fish():
         self.depth_ctrl_vert(z_des-self.environment.pos[self.id][2])
         """ debugging
         self.dorsal = 0
-        self.caudal = 0
+        self.caudal = 1 #why is predator slower than fish
         self.pect_r = 0
         self.pect_l = 0
         """

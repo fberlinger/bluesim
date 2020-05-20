@@ -46,7 +46,8 @@ clock_freq = meta['Clock frequency [Hz]']
 clock_rate = 1000/clock_freq # [ms]
 arena = meta['Arena [mm]']
 timesteps = data.shape[0]
-fishes = math.floor(data.shape[1]/8)
+fishes = meta['Number of fishes']
+pred_bool = meta['pred_bool']
 
 # Format Data
 # x = data[:, :1]
@@ -76,14 +77,18 @@ if plot_kf:
 
         for idx, ii in enumerate(tracks):
             data_kf_track = data_kf[np.argwhere(data_kf[:,0]==ii)[:,0], :]
-            ax1.plot(data_kf_track[:,2], data_kf_track[:,3], marker = '*', markersize=12, label='kf_{}'.format(ii), color = colors[idx,:])
-            ax2.plot(data_kf_track[:,1], np.arctan2(np.sin(data_kf_track[:,5]), np.cos(data_kf_track[:,5])) * 180/np.pi, marker = '*', markersize=12, label='kf_{}'.format(ii), color = colors[idx,:])
+            if ii == 1000: #pred (just a different label)
+                 ax1.plot(data_kf_track[:,2], data_kf_track[:,3], marker = '*', markersize=12, label='kf pred', color = colors[idx,:])
+                 ax2.plot(data_kf_track[:,1], np.arctan2(np.sin(data_kf_track[:,5]), np.cos(data_kf_track[:,5])) * 180/np.pi, marker = '*', markersize=12, label='kf pred', color = colors[idx,:])
+            else:
+                ax1.plot(data_kf_track[:,2], data_kf_track[:,3], marker = '*', markersize=12, label='kf_{}'.format(ii), color = colors[idx,:])
+                ax2.plot(data_kf_track[:,1], np.arctan2(np.sin(data_kf_track[:,5]), np.cos(data_kf_track[:,5])) * 180/np.pi, marker = '*', markersize=12, label='kf_{}'.format(ii), color = colors[idx,:])
 
         ax1.legend()
         ax2.legend()
 
     #add groundtruth relative position
-    colors = cm.Reds(np.linspace(0.3,0.8,fishes))
+    colors = cm.Reds(np.linspace(0.3,0.8,fishes+pred_bool))
     for ii in [ii for ii in range(fishes) if ii != protagonist_id]:
         rel_x_unrot = np.array(data[:, 4*ii]) - np.array(data[:, 4*protagonist_id])
         rel_y_unrot = np.array(data[:, 4*ii + 1]) - np.array(data[:, 4*protagonist_id + 1])
@@ -95,8 +100,24 @@ if plot_kf:
         rel_phi = np.arctan2(np.sin(phi_fish - phi_prot), np.cos(phi_fish - phi_prot))
         ax1.plot(rel_x, rel_y, marker = 'o', label='groundtruth_{}'.format(ii), color = colors[ii,:])
         ax2.plot(rel_phi * 180/np.pi, marker = 'o', label='groundtruth_{}'.format(ii), color = colors[ii,:])
-        ax1.legend()
-        ax2.legend()
+
+    if pred_bool:
+        pred_start = np.where(data[:-1, 8*fishes] != data[1:, 8*fishes])[0][0] + 1
+        pred_end = np.where(data[:-1, 8*fishes] != data[1:, 8*fishes])[0][-1] + 1
+        rel_x_unrot = np.array(data[pred_start:pred_end, 8*fishes]) - np.array(data[pred_start:pred_end, 4*protagonist_id])
+        rel_y_unrot = np.array(data[pred_start:pred_end, 8*fishes + 1]) - np.array(data[pred_start:pred_end, 4*protagonist_id + 1])
+        rel_z = np.array(data[pred_start:pred_end, 8*fishes + 2]) - np.array(data[pred_start:pred_end, 4*protagonist_id + 2])
+        phi_prot = np.array(data[pred_start:pred_end, 4*protagonist_id + 3])
+        phi_fish = np.array(data[pred_start:pred_end, 8*fishes + 3])
+        rel_x = rel_x_unrot * np.cos(phi_prot) + rel_y_unrot * np.sin(phi_prot)
+        rel_y = - rel_x_unrot * np.sin(phi_prot) + rel_y_unrot * np.cos(phi_prot)
+        rel_phi = np.arctan2(np.sin(phi_fish - phi_prot), np.cos(phi_fish - phi_prot))
+        ax1.plot(rel_x, rel_y, marker = 'o', label='groundtruth pred', color = colors[fishes,:])
+        ax2.plot(range(pred_start, pred_end), rel_phi * 180/np.pi, marker = 'o', label='groundtruth pred', color = colors[fishes,:])
+
+    
+    ax1.legend()
+    ax2.legend()   
 
     fig.suptitle('Kf tracking of fish {}'.format(protagonist_id))
     plt.gcf().canvas.get_tk_widget().focus_force()  #apparently necessary for mac to open new figure in front of everything

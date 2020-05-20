@@ -49,7 +49,7 @@ def exp_rv(param):
 def log_meta():
     """Logs the meta data of the experiment
     """
-    meta = {'Experiment': experiment_type, 'Number of fishes': no_fish, 'Simulation time [s]': simulation_time, 'Clock frequency [Hz]': clock_freq, 'Arena [mm]': arena_list, 'Visual range [mm]': v_range, 'Width of blindspot [mm]': w_blindspot, 'Radius of blocking sphere [mm]': r_sphere, 'Visual noise magnitude [% of distance]': n_magnitude, 'pred_bool': pred_bool}
+    meta = {'Experiment': experiment_type, 'Number of fishes': no_fish, 'Simulation time [s]': simulation_time, 'Clock frequency [Hz]': clock_freq, 'Arena [mm]': arena_list, 'Visual range [mm]': v_range, 'Width of blindspot [mm]': w_blindspot, 'Radius of blocking sphere [mm]': r_sphere, 'Visual noise magnitude [% of distance]': n_magnitude, 'surface_reflections': surface_reflections, 'pred_bool': pred_bool, 'escape_angle': escape_angle, 'pred_speed': pred_speed}
     with open('./logfiles/{}_meta.txt'.format(filename), 'w') as f:
         json.dump(meta, f, indent=2)
 
@@ -65,22 +65,28 @@ Fish = getattr(importlib.import_module('fishfood.' + experiment_type), 'Fish') #
 
 # Experimental Parameters
 no_fish = 10
-simulation_time = 330 # [s]
+simulation_time = 180 # [s]
 clock_freq = 2 # [Hz]
 clock_rate = 1/clock_freq
-
-if experiment_type == "fountain":
-    pred_bool = True
-else:
-    pred_bool = False
 
 # Fish Specifications
 v_range=3000 # visual range, [mm]
 w_blindspot=50 # width of blindspot, [mm]
 r_sphere=50 # radius of blocking sphere for occlusion, [mm]
 n_magnitude=0 # visual noise magnitude, [% of distance]
-fish_specs = (v_range, w_blindspot, r_sphere, n_magnitude)
+surface_reflections=True
 
+if experiment_type == "fountain":
+    pred_bool = True
+    escape_angle = 110 * math.pi/180 # escape angle for fish, [rad]
+    fish_factor_speed = 0.05 #slow down fish from max speed with this factor, keep at 0.05
+    pred_speed = 50 # [mm/s] (good range: 40-50, max fish speed is approx 60mm/s with fish_factor_speed = 0.05)
+else:
+    pred_bool = False
+    escape_angle = 0
+    pred_speed = 0
+
+fish_specs = (v_range, w_blindspot, r_sphere, n_magnitude, surface_reflections, escape_angle, pred_speed, fish_factor_speed)
 # Standard Tank
 arena_list = [1780, 1780, 1170]
 arena_list = [2*x for x in arena_list] #pw for fountain more space for now
@@ -96,12 +102,10 @@ pos[:,2] = 1000 * np.random.rand(1, no_fish) # z, all fish a same noise-free dep
 pos[:,3] = 2*math.pi * (np.random.rand(1, no_fish) - 0.5)# phi
 
 # Create Environment, Dynamics, And Heap
-environment = Environment(pos, vel, fish_specs, arena, pred_bool)
+environment = Environment(pos, vel, fish_specs, arena, pred_bool, clock_freq)
 dynamics = Dynamics(environment, clock_freq)
-if pred_bool:
-    H = Heap(no_fish+1)
-else:
-    H = Heap(no_fish)
+
+H = Heap(no_fish+ pred_bool)
 
 # Create Fish Instances And Insert Into Heap
 fishes = []
@@ -111,8 +115,10 @@ for fish_id in range(no_fish):
     H.insert(fish_id, clock)
 
 if pred_bool:
+    clock = exp_rv(clock_rate)
     predator = Predator(dynamics, environment)
     H.insert(no_fish, clock) #insert one more ticket in heap
+    
 # Simulate
 print('#### WELCOME TO BLUESIM ####')
 print('Progress:', end=' ', flush=True)
@@ -153,5 +159,3 @@ log_meta()
 print('Simulation data got saved in ./logfiles/{}_data.txt,\nand corresponding experimental info in ./logfiles/{}_meta.txt.\n -'.format(filename, filename))
 print('Create corresponding animation by running >python animation.py {}'.format(filename))
 print('#### GOODBYE AND SEE YOU SOON AGAIN ####')
-
-
