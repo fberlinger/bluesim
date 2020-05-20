@@ -31,24 +31,20 @@ Installation: Manually following instructions on https://github.com/maartenbredd
 
 *Use the heap implementation for maximum performance! The threads implementation is not currently fully supported.*
 
-1. Go to `*/FastSim/heap`
+1. Go to `*/FastSim/heap/fishfood`
 
-2. Delete `fish.py`
-
-3. Go to the subfolder `fishfood`, create a copy of `fish_template.py` and rename it, implement your Bluebot code there; **or** choose an existing experiment-file
-
-4. Copy your file to the `heap` parent-folder, and rename it to `fish.py`
-
-**Warning: Any changes made directly in `fish.py` will be lost during the next execution of step 2. Save your final code in the `fishfood` folder.**
+2. Save your new experiment here. If designing a new one, you may start with a copy of `fish_template.py`, which offers some basic functionalities.
 
 ## Run an Experiment with Simulated Bluebots
 
-Change experimental parameters such as number of fish and simulation time in `main.py`.
+1. Go to `*/FastSim/heap`
 
-Run `main.py` from a terminal, together with an experiment description, e.g.:
+2. Change experimental parameters such as number of fish and simulation time in `simulation.py`.
+
+3. Run `simulation.py` from a terminal, together with the filename of the experiment in `fishfood` you want to simulate, e.g.:
 
 ```
-python main.py schooling
+python simulation.py dispersion
 ```
 
 Simulation results get saved in `./logfiles/` with a `yymmdd_hhmmss` prefix in the filename. Experimental parameters are saved in `yymmdd_hhmmss_meta.txt`; experimental data in `yymmdd_hhmmss_data.txt`.
