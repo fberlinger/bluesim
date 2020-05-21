@@ -108,7 +108,7 @@ for no_fish in range(5,11,5):
 
     # Create Environment, Dynamics, And Heap
     environment = Environment(pos, vel, fish_specs, arena, pred_bool, clock_freq)
-    dynamics = Dynamics(environment, clock_freq)
+    dynamics = Dynamics(environment)
 
     H = Heap(no_fish + pred_bool)
 
@@ -127,14 +127,12 @@ for no_fish in range(5,11,5):
     print('#### WELCOME TO BLUESIM ####')
     print('Progress:', end=' ', flush=True)
     t_start = time.time()
-    if pred_bool:
-        simulation_steps = no_fish*simulation_time*clock_freq # overall
-    else:
-        simulation_steps = (no_fish+1)*simulation_time*clock_freq # overall
+    
+    simulation_steps = (no_fish+pred_bool)*simulation_time*clock_freq # overall
 
     steps = 0
     prog_incr = 0.1
-
+    
     while True:
         progress = steps/simulation_steps
         if progress >= prog_incr:
@@ -142,18 +140,19 @@ for no_fish in range(5,11,5):
             prog_incr += 0.1
         if steps >= simulation_steps:
                 break
-
+    
         (uuid, event_time) = H.delete_min()
+        duration = random.gauss(clock_rate, 0.1*clock_rate)
         if uuid < no_fish:
-            fishes[uuid].run()
+            fishes[uuid].run(duration)
         else:
-            predator.run()
-        next_clock = event_time + exp_rv(clock_rate)
-        H.insert(uuid, next_clock)
-
+            predator.run(duration)
+        H.insert(uuid, event_time + duration)
+    
         steps += 1
 
     print('| Duration: {} sec\n -'.format(round(time.time()-t_start)))
+
 
     # Save Data
     filename = time.strftime("%y%m%d_%H%M%S") # date_time

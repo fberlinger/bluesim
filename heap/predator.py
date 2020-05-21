@@ -16,12 +16,11 @@ class Predator():
         self.environment = environment
 
         self.hunt_started = False
-        self.dt = 1/self.environment.clock_freq 
         self.pred_phi = 0
 
-    def run(self):
+    def run(self, duration):
 
-        self.move()
+        self.move(duration)
 
     def calc_phi_mean_std(self):
         phi_array = np.vstack(self.environment.pos)[:,3]
@@ -70,22 +69,22 @@ class Predator():
             self.environment.pred_pos[2] = 0
             self.environment.pred_pos[3] = 0
 
-    def simulate_predator_move(self, pred_speed, pred_phi):
-        delta_dist = pred_speed*self.dt
+    def simulate_predator_move(self, pred_speed, pred_phi, duration):
+        delta_dist = pred_speed*duration
         pred_dir = np.array([np.cos(pred_phi), np.sin(pred_phi), 0])
 
         self.environment.pred_pos[:3] += delta_dist * pred_dir
         self.environment.pred_pos[3] = pred_phi
         self.check_pred_visible()
 
-    def move(self):
+    def move(self, duration):
         """Decision-making based on neighboring robots and corresponding move
         """
         pred_speed = 0
 
         if self.hunt_started:
             if self.environment.pred_visible:
-                self.simulate_predator_move(self.environment.pred_speed, self.pred_phi) #pw check dt
+                self.simulate_predator_move(self.environment.pred_speed, self.pred_phi, duration) #pw check dt
 
         else:
             fish_phi_mean, fish_phi_std = self.calc_phi_mean_std()

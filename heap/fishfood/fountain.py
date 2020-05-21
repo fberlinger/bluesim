@@ -159,12 +159,12 @@ class Fish():
                     )
                 )
 
-    def run(self):
+    def run(self, duration):
         """(1) Get neighbors from environment, (2) move accordingly, (3) update your state in environment
         """
         robots, rel_pos, dist, leds = self.environment.get_robots(self.id)
         pred_rel_pos = self.environment.perceive_pred(self.id, robots, rel_pos, dist)
-        target_pos, vel = self.move(leds, pred_rel_pos)
+        target_pos, vel = self.move(leds, pred_rel_pos, duration)
         self.environment.update_states(self.id, target_pos, vel)
 
     def kalman_prediction_update(self):
@@ -800,7 +800,7 @@ class Fish():
         # else:
             # self.caudal = 0
 
-    def move(self, detected_blobs, pred_pos):
+    def move(self, detected_blobs, pred_pos, duration):
         """Decision-making based on neighboring robots and corresponding move
         """
         self.it_counter += 1
@@ -846,6 +846,6 @@ class Fish():
         self.pect_l = 0
         """
         self.dynamics.update_ctrl(self.dorsal, self.caudal, self.pect_r, self.pect_l)
-        target_pos, self_vel = self.dynamics.simulate_move(self.id)
+        target_pos, self_vel = self.dynamics.simulate_move(self.id, duration)
 
         return (target_pos, self_vel)

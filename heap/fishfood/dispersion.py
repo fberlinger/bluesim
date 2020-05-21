@@ -8,7 +8,7 @@ import time
 class Fish():
     """Bluebot instance
     """
-
+    
     def __init__(self, my_id, dynamics, environment):
         # Arguments
         self.id = my_id
@@ -57,7 +57,7 @@ class Fish():
 
     def depth_ctrl_vision(self, r_move_g):
         """Vision-like depth control
-
+        
         Args:
             r_move_g (np.array): Relative position of desired goal location in robot frame.
         """
@@ -72,7 +72,7 @@ class Fish():
 
     def depth_ctrl_psensor(self, r_move_g):
         """Pressure-sensor-like depth control
-
+        
         Args:
             r_move_g (np.array): Relative position of desired goal location in robot frame.
         """
@@ -86,7 +86,7 @@ class Fish():
 
     def home(self, r_move_g, magnitude):
         """Homing behavior. Sets fin controls to move toward a desired goal location.
-
+        
         Args:
             r_move_g (np.array): Relative position of desired goal location in robot frame.
             magnitude (TYPE): Description
@@ -138,8 +138,8 @@ class Fish():
             return (target_pos, self_vel)
 
         # Define your move here
-        move = np.zeros((3,))
-        magnitude = 1
+        center, magnitude = self.lj_force(robots, rel_pos, dist, r_target=1000)
+        move = center
 
         # Global to Robot Transformation
         phi = self.environment.pos[self.id,3]

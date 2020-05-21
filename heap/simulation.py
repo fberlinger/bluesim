@@ -64,8 +64,8 @@ Fish = getattr(importlib.import_module('fishfood.' + experiment_type), 'Fish') #
 ## Feel free to loop over multiple simulations with different parameters! ##
 
 # Experimental Parameters
-no_fish = 5#10
-simulation_time = 20 #180 # [s]
+no_fish = 10
+simulation_time = 180 # [s]
 clock_freq = 2 # [Hz]
 clock_rate = 1/clock_freq
 
@@ -104,14 +104,14 @@ pos[:,3] = 2*math.pi * (np.random.rand(1, no_fish) - 0.5)# phi
 
 # Create Environment, Dynamics, And Heap
 environment = Environment(pos, vel, fish_specs, arena, pred_bool, clock_freq)
-dynamics = Dynamics(environment, clock_freq)
+dynamics = Dynamics(environment)
 
-H = Heap(no_fish+ pred_bool)
+H = Heap(no_fish + pred_bool)
 
 # Create Fish Instances And Insert Into Heap
 fishes = []
 for fish_id in range(no_fish):
-    clock = exp_rv(clock_rate)
+    clock = random.gauss(clock_rate, 0.1*clock_rate)
     fishes.append(Fish(fish_id, dynamics, environment))
     H.insert(fish_id, clock)
 
@@ -119,15 +119,13 @@ if pred_bool:
     clock = exp_rv(clock_rate)
     predator = Predator(dynamics, environment)
     H.insert(no_fish, clock) #insert one more ticket in heap
-    
+
 # Simulate
 print('#### WELCOME TO BLUESIM ####')
 print('Progress:', end=' ', flush=True)
 t_start = time.time()
-if pred_bool:
-    simulation_steps = no_fish*simulation_time*clock_freq # overall
-else:
-    simulation_steps = (no_fish+1)*simulation_time*clock_freq # overall
+
+simulation_steps = (no_fish+pred_bool)*simulation_time*clock_freq # overall
 
 steps = 0
 prog_incr = 0.1
@@ -141,12 +139,12 @@ while True:
             break
 
     (uuid, event_time) = H.delete_min()
+    duration = random.gauss(clock_rate, 0.1*clock_rate)
     if uuid < no_fish:
-        fishes[uuid].run()
+        fishes[uuid].run(duration)
     else:
-        predator.run()
-    next_clock = event_time + exp_rv(clock_rate)
-    H.insert(uuid, next_clock)
+        predator.run(duration)
+    H.insert(uuid, event_time + duration)
 
     steps += 1
 
