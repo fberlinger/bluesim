@@ -64,8 +64,8 @@ Fish = getattr(importlib.import_module('fishfood.' + experiment_type), 'Fish') #
 ## Feel free to loop over multiple simulations with different parameters! ##
 
 # Experimental Parameters
-no_fish = 10
-simulation_time = 180 # [s]
+no_fish = 5#10
+simulation_time = 20 #180 # [s]
 clock_freq = 2 # [Hz]
 clock_rate = 1/clock_freq
 
@@ -73,8 +73,8 @@ clock_rate = 1/clock_freq
 v_range=3000 # visual range, [mm]
 w_blindspot=50 # width of blindspot, [mm]
 r_sphere=50 # radius of blocking sphere for occlusion, [mm]
-n_magnitude=0 # visual noise magnitude, [% of distance]
-surface_reflections=True
+n_magnitude=0.0 # visual noise magnitude, [% of distance]
+surface_reflections=False
 
 if experiment_type == "fountain":
     pred_bool = True
@@ -85,6 +85,7 @@ else:
     pred_bool = False
     escape_angle = 0
     pred_speed = 0
+    fish_factor_speed = 1
 
 fish_specs = (v_range, w_blindspot, r_sphere, n_magnitude, surface_reflections, escape_angle, pred_speed, fish_factor_speed)
 # Standard Tank

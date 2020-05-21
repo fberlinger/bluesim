@@ -253,7 +253,7 @@ class Environment():
     def visual_noise(self, source_id, rel_pos):
         """Adds visual noise
         """
-        magnitudes = self.m_magnitude * np.array([self.dist[source_id]]).T # 10% of distance
+        magnitudes = self.n_magnitude * np.array([self.dist[source_id]]).T # 10% of distance
         noise = magnitudes * (np.random.rand(self.no_robots, self.no_states) - 0.5) # zero-mean uniform noise
         n_rel_pos = rel_pos + noise
         n_dist = np.linalg.norm(n_rel_pos[:,:3], axis=1) # new dist without phi
@@ -298,14 +298,22 @@ class Environment():
                 refl_list.append(refl)
         return refl_list
 
-    def calc_relative_leds(self, source_id, robots): #copied and adapted from BlueSwarm Code "avoid_duplicates_by_angle" #pw split this up in env and fish part?
+    def calc_relative_leds(self, source_id, robots):
         """Use right and left cameras just up to the xz-plane such that the overlapping camera range disappears and there are no duplicates.
 
         Returns:
             tuple: all_blobs (that are valid, i.e. not duplicates) and their all_angles
         """
         all_blobs = np.empty((3,0))
-        leds = [x for i,x in enumerate(self.leds_pos) if i in robots]#!= source_id]   #ignore my own leds and only take leds of fish that I can see
+        
+        noisy_leds_pos = self.leds_pos.copy()
+        if self.n_magnitude:
+            for i in robots:
+                magnitudes = self.n_magnitude * np.array([self.dist[source_id][i]]).T # 10% of distance
+                noise = magnitudes * (np.random.rand(3, 1) - 0.5) # zero-mean uniform noise
+                noisy_leds_pos[i] = noisy_leds_pos[i] + noise #add same noise on all 3 leds
+
+        leds = [x for i,x in enumerate(noisy_leds_pos) if i in robots]   #ignore my own leds and only take leds of fish that I can see
         if leds:
             leds_list = list(np.transpose(np.hstack(leds)))
 
@@ -343,7 +351,7 @@ class Environment():
         return rel_pos_pred
 
     def perceive_pred(self, source_id, robots, rel_pos, rel_dist):
-        pred_rel_pos = self.get_rel_pos_pred(source_id) #pw: add noise, occlusion etc
+        pred_rel_pos = self.get_rel_pos_pred(source_id)
 
         #check if pred occluded by other fish
         occluded = False

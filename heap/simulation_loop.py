@@ -54,11 +54,6 @@ def log_meta():
     with open('./logfiles/{}_meta.txt'.format(filename), 'w') as f:
         json.dump(meta, f, indent=2)
 
-def init_log_stat():
-    with open('./logfiles/{}_stat.csv'.format(loopname), 'w') as f:
-        f.truncate()
-        f.write('filename, no_fish, escape_angle [rad], speed_ratio, phi_std_init, phi_std_end, eaten, no_tracks_avg, hull_area_max [m^2] \n')
-
 # Read Experiment Description
 try:
     experiment_type = sys.argv[1]
@@ -76,7 +71,7 @@ clock_rate = 1/clock_freq
 v_range=3000 # visual range, [mm]
 w_blindspot=50 # width of blindspot, [mm]
 r_sphere=50 # radius of blocking sphere for occlusion, [mm]
-n_magnitude=0 # visual noise magnitude, [% of distance]
+n_magnitude=0.05 # visual noise magnitude, [% of distance]
 surface_reflections=True
 
 if experiment_type == "fountain":
@@ -87,6 +82,7 @@ if experiment_type == "fountain":
 else:
     pred_bool = False
     escape_angle = 0
+    fish_factor_speed = 1
     pred_speed = 0
 
 fish_specs = (v_range, w_blindspot, r_sphere, n_magnitude, surface_reflections, escape_angle, pred_speed, fish_factor_speed)
@@ -100,7 +96,7 @@ initial_spread = 500
 
 # Experimental Parameters
 loopname = 'no_fish'
-init_log_stat()
+
 for no_fish in range(5,11,5):
 
     # Standard Surface Initialization
