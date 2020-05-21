@@ -29,27 +29,30 @@ def init_log_stat():
     print('creating stat logfile')
     with open('./logfiles/{}_stat.csv'.format(loopname), 'w') as f:
         f.truncate()
-        f.write('filename, no_fish, escape_angle [rad], n_magnitude, surface_reflections, speed_ratio, phi_std_init, phi_std_end, hull_area_max [m^2], eaten, no_tracks_avg, kf tracking error avg [mm] \n')
+        f.write('experiment, filename, runtime [s], no_fish, n_magnitude, surface_reflections, escape_angle [rad], pred_speed_ratio, phi_std_init, phi_std_end, hull_area_max [m^2], eaten, no_tracks_avg, kf pos tracking error avg [m], kf phi tracking error avg [rad]  \n')
 
 
-def log_stat(loopname, filename, fishes, escape_angle, noise, surface_reflections, speed_ratio, phi_std_init, phi_std_end, hull_area_max, eaten, no_tracks_avg, tracking_error_avg):
+def log_stat(experiment_type, loopname, filename, runtime, fishes, noise, surface_reflections, escape_angle, speed_ratio, phi_std_init, phi_std_end, hull_area_max, eaten, no_tracks_avg, pos_tracking_error_avg, phi_tracking_error_avg):
     """Logs the meta data of the experiment
     """
     with open('./logfiles/{}_stat.csv'.format(loopname), 'a+') as f:
         f.write(
-            '{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}\n'.format( #add: escape_angle, reflection on/off, speed ratio pred/fish, tracking error: how to measure?? dist track - closest groundtruth?
+            '{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}\n'.format( 
+                experiment_type,
                 filename,
+                runtime,
                 fishes,
-                escape_angle,
                 noise,
                 surface_reflections,
+                escape_angle,
                 speed_ratio,
                 phi_std_init,
                 phi_std_end,
                 hull_area_max,
                 eaten,
                 no_tracks_avg,
-                tracking_error_avg
+                pos_tracking_error_avg,
+                phi_tracking_error_avg
             )
         )
 
@@ -81,6 +84,7 @@ escape_angle = meta['escape_angle']
 surface_reflections = meta['surface_reflections']
 pred_speed = meta['pred_speed']
 pred_bool = meta['pred_bool']
+experiment_type = meta['Experiment']
 
 
 if 'loopname' in meta:
@@ -150,7 +154,9 @@ print('The largest hull area is {} m^2.'.format(hull_area_max/1000**2))
 
 #log kf data¨
 no_tracks_avg = 0
-tracking_error_avg = 0   
+pos_tracking_error_avg = 0 
+phi_tracking_error_avg = 0   
+  
 for protagonist_id in range(fishes):
     data_kf = np.genfromtxt('./logfiles/kf_{}.csv'.format(protagonist_id), delimiter=',')
     data_kf = data_kf[1:,:] #cut title row
@@ -161,26 +167,34 @@ for protagonist_id in range(fishes):
     #tracking   
     kf_iterations = np.unique(data_kf[:,1]).astype(int)
     for i in range(timesteps):#kf_iterations: #all iterations
-        kf_pos = data_kf[np.argwhere(data_kf[:,1] == i).ravel(), 2:5] #no_fishx3
-        if np.size(kf_pos, 0):
-            prot_pos = data[i, 4*protagonist_id :  4*protagonist_id + 3] 
-            prot_phi = data[i, 4*protagonist_id + 3 :  4*protagonist_id + 4] 
-            all_fish_pos = np.array([data[i, 4*ii :  4*ii + 3] for ii in range(fishes) if ii != protagonist_id]) #for matching only us pos, no phi
-            rel_pos_unrot = prot_pos - all_fish_pos
+        kf = data_kf[np.argwhere(data_kf[:,1] == i).ravel(), 2:6] #no_fishx4
+        if np.size(kf, 0):
+            kf_pos = kf[:, :3]
+            kf_phi = kf[:, 3]
+            prot = data[i, 4*protagonist_id :  4*protagonist_id + 4] 
+            prot_phi = prot[3]
+            all_fish = np.array([data[i, 4*ii :  4*ii + 4] for ii in range(fishes) if ii != protagonist_id]) #for matching only us pos, no phi
 
+            rel_pos_unrot = (all_fish[:, :3]- prot[:3])
             R = np.array([[math.cos(prot_phi), math.sin(prot_phi), 0],[-math.sin(prot_phi), math.cos(prot_phi), 0],[0,0,1]]) #rotate by phi around z axis to transform from global to robot frame
-            groundtruth_pos =  (R @ rel_pos_unrot.T).T
+            groundtruth_pos = (R @ rel_pos_unrot.T).T
+            groundtruth_phi = np.arctan2(np.sin(all_fish[:, 3] - prot_phi), np.cos(all_fish[:, 3] - prot_phi))
             
             dist = cdist(kf_pos, groundtruth_pos, 'euclidean')    
             kf_matched_ind, groundtruth_matched_ind = linear_sum_assignment(dist)
             error_i = dist[kf_matched_ind, groundtruth_matched_ind].sum()
-            tracking_error_avg += error_i/np.size(kf_pos, 0)
+            phi_diff = kf_phi[kf_matched_ind] - groundtruth_phi[groundtruth_matched_ind]
+            error_phi = np.sum(abs(np.arctan2(np.sin(phi_diff), np.cos(phi_diff))))
+            pos_tracking_error_avg += error_i/np.size(kf, 0)
+            phi_tracking_error_avg += error_phi/np.size(kf, 0)
 
 no_tracks_avg /= fishes
 print('{} kf tracks were created in avg.'.format(no_tracks_avg))
 
 
-tracking_error_avg /= (timesteps*fishes)
-print('The avg tracking error is {} mm.'.format(tracking_error_avg))
+pos_tracking_error_avg /= (timesteps*fishes)
+phi_tracking_error_avg /= (timesteps*fishes)
 
-log_stat(loopname, filename, fishes, escape_angle, n_magnitude, surface_reflections, speed_ratio, phi_std[0], phi_std[-1], hull_area_max/1000**2, int(sum(eaten)), no_tracks_avg, tracking_error_avg)
+print('The avg pos tracking error is {} mm and the avg phi tracking error is {} deg.'.format(pos_tracking_error_avg, phi_tracking_error_avg*180/math.pi))
+
+log_stat(experiment_type, loopname, filename, timesteps/clock_freq, fishes, n_magnitude, surface_reflections, escape_angle, speed_ratio, phi_std[0], phi_std[-1], hull_area_max/1000**2, int(sum(eaten)), no_tracks_avg, pos_tracking_error_avg/1000, phi_tracking_error_avg)

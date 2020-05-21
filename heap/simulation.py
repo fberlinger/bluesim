@@ -27,6 +27,7 @@ import random
 import sys
 import time
 import importlib
+import os, glob
 
 from predator import Predator
 from environment import Environment
@@ -61,11 +62,14 @@ except:
     print('No experiment description provided, using as default', experiment_type)
 
 Fish = getattr(importlib.import_module('fishfood.' + experiment_type), 'Fish') #import Fish class directly from module specified by experiment type
-## Feel free to loop over multiple simulations with different parameters! ##
+
+#remove all previous kf log files
+for kf_file in glob.glob("./logfiles/kf*"):
+    os.remove(kf_file)
 
 # Experimental Parameters
-no_fish = 10
-simulation_time = 180 # [s]
+no_fish = 3
+simulation_time = 40 # [s]
 clock_freq = 2 # [Hz]
 clock_rate = 1/clock_freq
 
@@ -74,7 +78,7 @@ v_range=3000 # visual range, [mm]
 w_blindspot=50 # width of blindspot, [mm]
 r_sphere=50 # radius of blocking sphere for occlusion, [mm]
 n_magnitude=0.0 # visual noise magnitude, [% of distance]
-surface_reflections=False
+surface_reflections=True
 
 if experiment_type == "fountain":
     pred_bool = True
@@ -83,9 +87,9 @@ if experiment_type == "fountain":
     pred_speed = 50 # [mm/s] (good range: 40-50, max fish speed is approx 60mm/s with fish_factor_speed = 0.05)
 else:
     pred_bool = False
-    escape_angle = 0
-    pred_speed = 0
-    fish_factor_speed = 1
+    escape_angle = []
+    fish_factor_speed = []
+    pred_speed = []
 
 fish_specs = (v_range, w_blindspot, r_sphere, n_magnitude, surface_reflections, escape_angle, pred_speed, fish_factor_speed)
 # Standard Tank

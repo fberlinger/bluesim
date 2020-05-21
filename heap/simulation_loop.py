@@ -27,7 +27,7 @@ import random
 import sys
 import time
 import importlib
-import os
+import os, glob
 
 from predator import Predator
 from environment import Environment
@@ -63,6 +63,10 @@ except:
 
 Fish = getattr(importlib.import_module('fishfood.' + experiment_type), 'Fish') #import Fish class directly from module specified by experiment type
 
+#remove all previous kf log files
+for kf_file in glob.glob("./logfiles/kf*"):
+    os.remove(kf_file)
+    
 simulation_time = 180 # [s]
 clock_freq = 2 # [Hz]
 clock_rate = 1/clock_freq
@@ -81,9 +85,9 @@ if experiment_type == "fountain":
     pred_speed = 50 # [mm/s] (good range: 40-50, max fish speed is approx 60mm/s with fish_factor_speed = 0.05)
 else:
     pred_bool = False
-    escape_angle = 0
-    fish_factor_speed = 1
-    pred_speed = 0
+    escape_angle = []
+    fish_factor_speed = []
+    pred_speed = []
 
 fish_specs = (v_range, w_blindspot, r_sphere, n_magnitude, surface_reflections, escape_angle, pred_speed, fish_factor_speed)
 

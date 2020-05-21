@@ -76,13 +76,13 @@ if plot_kf:
         colors = cm.Blues(np.linspace(0.3,0.8,len(tracks)))
 
         for idx, ii in enumerate(tracks):
-            data_kf_track = data_kf[np.argwhere(data_kf[:,0]==ii)[:,0], :]
+            data_kf_track = data_kf[np.argwhere(data_kf[:,0]==ii).ravel(), :]
             if ii == 1000: #pred (just a different label)
                  ax1.plot(data_kf_track[:,2], data_kf_track[:,3], marker = '*', markersize=12, label='kf pred', color = colors[idx,:])
-                 ax2.plot(data_kf_track[:,1], np.arctan2(np.sin(data_kf_track[:,5]), np.cos(data_kf_track[:,5])) * 180/np.pi, marker = '*', markersize=12, label='kf pred', color = colors[idx,:])
+                 ax2.plot(data_kf_track[:,1]/clock_freq, np.arctan2(np.sin(data_kf_track[:,5]), np.cos(data_kf_track[:,5])) * 180/np.pi, marker = '*', markersize=12, label='kf pred', color = colors[idx,:])
             else:
                 ax1.plot(data_kf_track[:,2], data_kf_track[:,3], marker = '*', markersize=12, label='kf_{}'.format(ii), color = colors[idx,:])
-                ax2.plot(data_kf_track[:,1], np.arctan2(np.sin(data_kf_track[:,5]), np.cos(data_kf_track[:,5])) * 180/np.pi, marker = '*', markersize=12, label='kf_{}'.format(ii), color = colors[idx,:])
+                ax2.plot(data_kf_track[:,1]/clock_freq, np.arctan2(np.sin(data_kf_track[:,5]), np.cos(data_kf_track[:,5])) * 180/np.pi, marker = '*', markersize=12, label='kf_{}'.format(ii), color = colors[idx,:])
 
         ax1.legend()
         ax2.legend()
@@ -99,7 +99,7 @@ if plot_kf:
         rel_y = - rel_x_unrot * np.sin(phi_prot) + rel_y_unrot * np.cos(phi_prot)
         rel_phi = np.arctan2(np.sin(phi_fish - phi_prot), np.cos(phi_fish - phi_prot))
         ax1.plot(rel_x, rel_y, marker = 'o', label='groundtruth_{}'.format(ii), color = colors[ii,:])
-        ax2.plot(rel_phi * 180/np.pi, marker = 'o', label='groundtruth_{}'.format(ii), color = colors[ii,:])
+        ax2.plot(np.array(range(timesteps))/clock_freq, rel_phi * 180/np.pi, marker = 'o', label='groundtruth_{}'.format(ii), color = colors[ii,:])
 
     if pred_bool:
         pred_start = np.where(data[:-1, 8*fishes] != data[1:, 8*fishes])[0][0] + 1
@@ -113,7 +113,7 @@ if plot_kf:
         rel_y = - rel_x_unrot * np.sin(phi_prot) + rel_y_unrot * np.cos(phi_prot)
         rel_phi = np.arctan2(np.sin(phi_fish - phi_prot), np.cos(phi_fish - phi_prot))
         ax1.plot(rel_x, rel_y, marker = 'o', label='groundtruth pred', color = colors[fishes,:])
-        ax2.plot(range(pred_start, pred_end), rel_phi * 180/np.pi, marker = 'o', label='groundtruth pred', color = colors[fishes,:])
+        ax2.plot(np.array(range(pred_start, pred_end))/clock_freq, rel_phi * 180/np.pi, marker = 'o', label='groundtruth pred', color = colors[fishes,:])
 
     
     ax1.legend()
@@ -132,7 +132,7 @@ if plot_phi:
     phi_mean_sin = np.zeros((timesteps))
 
     for ii in range(fishes):
-        axs.plot(np.arctan2(np.sin(data[:, 4*ii + 3]), np.cos(data[:, 4*ii + 3])), label=ii)
+        axs.plot(np.array(range(timesteps))/clock_freq, np.arctan2(np.sin(data[:, 4*ii + 3]), np.cos(data[:, 4*ii + 3])), label=ii)
         phi_mean_cos += np.cos(data[:, 4*ii + 3])
         phi_mean_sin += np.sin(data[:, 4*ii + 3])
 
@@ -141,8 +141,8 @@ if plot_phi:
     phi_mean = np.arctan2(phi_mean_sin, phi_mean_cos)
     phi_std = np.sqrt(-np.log(phi_mean_sin**2 + phi_mean_cos**2))
 
-    axs.plot(phi_mean, '--k', LineWidth=4, color ='gray', label="mean")
-    axs.plot(phi_std, ':k', LineWidth=4, color ='gray', label="std")
+    axs.plot(np.array(range(timesteps))/clock_freq, phi_mean, '--k', LineWidth=4, color ='gray', label="mean")
+    axs.plot(np.array(range(timesteps))/clock_freq, phi_std, ':k', LineWidth=4, color ='gray', label="std")
 
     axs.set_xlabel('Time [s]')
     axs.set_ylabel('Phi [rad]')

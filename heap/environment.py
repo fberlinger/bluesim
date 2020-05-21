@@ -336,12 +336,14 @@ class Environment():
 
         all_blobs = np.empty((3,0))
 
-        leds = self.leds_pos.copy()
-        if self.n_magnitude:
-            for i in robots:
-                magnitudes = self.n_magnitude * np.array([self.dist[source_id][i]]).T # 10% of distance
+        leds = []
+        for robot in robots:
+            if self.n_magnitude:
+                magnitudes = self.n_magnitude * np.array([self.dist[source_id][robot]]).T # 10% of distance
                 noise = magnitudes * (np.random.rand(3, 1) - 0.5) # zero-mean uniform noise
-                leds[i] += noise #add same noise on all 3 leds
+                leds.append(self.leds_pos[robot] + noise) #add same noise on all 3 leds
+            else:
+                leds.append(self.leds_pos[robot])
 
         leds_list = list(np.transpose(np.hstack(leds)))
         if self.surface_reflections:

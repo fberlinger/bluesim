@@ -3,7 +3,7 @@
 from math import *
 import numpy as np
 import time
-import os, glob
+import os
 
 from filterpy.kalman import KalmanFilter
 from scipy.spatial.distance import cdist
@@ -48,9 +48,6 @@ class Fish():
         self.kf_phi_prev = np.empty(0)
 
         # Logger instance
-        for filename in glob.glob("./logfiles/kf*"): #remove all previous files
-            os.remove(filename)
-
         with open('./logfiles/kf_{}.csv'.format(self.id), 'w') as f:
             f.truncate()
             f.write('TRACK_ID, ITERATION, X, Y, Z, PHI \n')
