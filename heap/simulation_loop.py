@@ -58,7 +58,7 @@ def log_meta():
 try:
     experiment_type = sys.argv[1]
 except:
-    experiment_type = 'fountain' #'aligning'#
+    experiment_type = 'aligning'# 'fountain' #
     print('No experiment description provided, using as default', experiment_type)
 
 Fish = getattr(importlib.import_module('fishfood.' + experiment_type), 'Fish') #import Fish class directly from module specified by experiment type
@@ -67,7 +67,7 @@ Fish = getattr(importlib.import_module('fishfood.' + experiment_type), 'Fish') #
 for kf_file in glob.glob("./logfiles/kf*"):
     os.remove(kf_file)
     
-simulation_time = 180 # [s]
+simulation_time = 60 # [s]
 clock_freq = 2 # [Hz]
 clock_rate = 1/clock_freq
 
@@ -81,7 +81,7 @@ surface_reflections=True
 if experiment_type == "fountain":
     pred_bool = True
     escape_angle = 110 * math.pi/180 # escape angle for fish, [rad]
-    fish_factor_speed = 0.05 #slow down fish from max speed with this factor, keep at 0.05
+    fish_factor_speed = 0.0 #slow down fish from max speed with this factor, keep at 0.05
     pred_speed = 50 # [mm/s] (good range: 40-50, max fish speed is approx 60mm/s with fish_factor_speed = 0.05)
 else:
     pred_bool = False
@@ -99,15 +99,17 @@ arena_center = arena / 2.0
 initial_spread = 500
 
 # Experimental Parameters
-loopname = 'no_fish'
+loopname = 'aligning_noise0.05_refTrue'
+no_repetitions = 10
+no_fish_range = range(5, 16, 5)
 
-for no_fish in range(5,11,5):
+for no_fish in sorted(list(no_fish_range) * no_repetitions): 
 
     # Standard Surface Initialization
     pos = np.zeros((no_fish, 4))
     vel = np.zeros((no_fish, 4))
     pos[:,:2] = initial_spread * (np.random.rand(no_fish, 2) - 0.5) + arena_center[:2] # x,y
-    pos[:,2] = 1000 * np.random.rand(1, no_fish) # z, all fish a same noise-free depth results in LJ lock
+    pos[:,2] = initial_spread * np.random.rand(1, no_fish) # z, all fish a same noise-free depth results in LJ lock
     pos[:,3] = 2*math.pi * (np.random.rand(1, no_fish) - 0.5)# phi
 
     # Create Environment, Dynamics, And Heap

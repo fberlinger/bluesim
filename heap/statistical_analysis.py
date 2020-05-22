@@ -29,15 +29,15 @@ def init_log_stat():
     print('creating stat logfile')
     with open('./logfiles/{}_stat.csv'.format(loopname), 'w') as f:
         f.truncate()
-        f.write('experiment, filename, runtime [s], no_fish, n_magnitude, surface_reflections, escape_angle [rad], pred_speed_ratio, phi_std_init, phi_std_end, hull_area_max [m^2], eaten, no_tracks_avg, kf pos tracking error avg [m], kf phi tracking error avg [rad]  \n')
+        f.write('experiment, filename, runtime [s], no_fish, n_magnitude, surface_reflections, escape_angle [rad], pred_speed_ratio, phi_std_init, phi_std_end, hull_area_max [m^2], pred_eaten, #tracks/timestep avg, #tracks overall avg, kf pos tracking error avg [m], kf phi tracking error avg [rad]  \n')
 
 
-def log_stat(experiment_type, loopname, filename, runtime, fishes, noise, surface_reflections, escape_angle, speed_ratio, phi_std_init, phi_std_end, hull_area_max, eaten, no_tracks_avg, pos_tracking_error_avg, phi_tracking_error_avg):
+def log_stat(experiment_type, loopname, filename, runtime, fishes, noise, surface_reflections, escape_angle, speed_ratio, phi_std_init, phi_std_end, hull_area_max, eaten, no_tracks_avg, no_new_tracks_avg, pos_tracking_error_avg, phi_tracking_error_avg):
     """Logs the meta data of the experiment
     """
     with open('./logfiles/{}_stat.csv'.format(loopname), 'a+') as f:
         f.write(
-            '{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}\n'.format( 
+            '{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}\n'.format( 
                 experiment_type,
                 filename,
                 runtime,
@@ -51,6 +51,7 @@ def log_stat(experiment_type, loopname, filename, runtime, fishes, noise, surfac
                 hull_area_max,
                 eaten,
                 no_tracks_avg,
+                no_new_tracks_avg,
                 pos_tracking_error_avg,
                 phi_tracking_error_avg
             )
@@ -109,16 +110,16 @@ phi_mean_sin = phi_mean_sin/fishes
 phi_mean = np.arctan2(phi_mean_sin, phi_mean_cos)
 phi_std = np.sqrt(-np.log(phi_mean_sin**2 + phi_mean_cos**2))
 
-print('The initial std phi is {0:.1f}rad.'.format(phi_std[0]))
-print('The final std phi is {0:.1f}rad.'.format(phi_std[-1]))
-print('The difference of mean phi is {0:.1f}rad.'.format(phi_mean[-1] - phi_mean[0]))
+print('The initial std phi is {0:.1f}.'.format(phi_std[0]))
+print('The final std phi is {0:.1f}.'.format(phi_std[-1]))
+print('The difference of mean phi is {0:.1f} deg.'.format(abs(phi_mean[-1] - phi_mean[0])*180/math.pi))
 
 #check eating area: ellipse
 eaten = []
 speed_ratio = []
 if pred_bool:
     pred_pos = data[:, 8*fishes : 8*fishes + 4]
-    
+    eaten = 0
     for ii in range(fishes):
         a = 60 #semi-major axis in x
         b = 50 #semi-minor axis in y
@@ -127,9 +128,8 @@ if pred_bool:
         rel_pos_rot[:, 0] = np.cos(pred_pos[:, 3])*rel_pos[:, 0] - np.sin(pred_pos[:, 3])*rel_pos[:, 1]
         rel_pos_rot[:, 1] = np.sin(pred_pos[:, 3])*rel_pos[:, 0] + np.cos(pred_pos[:, 3])*rel_pos[:, 1]
         p = ((rel_pos[:, 0])**2 / a**2 +  (rel_pos[:, 1])**2 / b**2)
-        eaten.append(np.any(p < 1)) #and consider delta z !
-    
-    print('{} fish out of {} got eaten.'.format(sum(eaten), fishes))
+        eaten += np.any(p < 1) #and consider delta z !
+    print('{} fish out of {} got eaten.'.format(eaten, fishes))
     
     #check pred_speed
     v_max_avg = 0
@@ -150,10 +150,11 @@ for i in range(timesteps):
     if hull.volume > hull_area_max:
         hull_area_max = hull.volume
 
-print('The largest hull area is {} m^2.'.format(hull_area_max/1000**2))
+print('The largest hull area is {:0.5f} m^2.'.format(hull_area_max/1000**2))
 
 #log kf data¨
 no_tracks_avg = 0
+no_new_tracks_avg = 0
 pos_tracking_error_avg = 0 
 phi_tracking_error_avg = 0   
   
@@ -162,13 +163,15 @@ for protagonist_id in range(fishes):
     data_kf = data_kf[1:,:] #cut title row
     #no tracks
     tracks = np.unique(data_kf[:,0]).astype(int)
-    no_tracks = len(tracks) - pred_bool
-    no_tracks_avg += no_tracks
+    no_new_tracks = len(tracks) - pred_bool
+    no_new_tracks_avg += no_new_tracks
     #tracking   
     kf_iterations = np.unique(data_kf[:,1]).astype(int)
     for i in range(timesteps):#kf_iterations: #all iterations
         kf = data_kf[np.argwhere(data_kf[:,1] == i).ravel(), 2:6] #no_fishx4
-        if np.size(kf, 0):
+        no_tracks_i = np.size(kf, 0)
+        no_tracks_avg += no_tracks_i
+        if no_tracks_i:
             kf_pos = kf[:, :3]
             kf_phi = kf[:, 3]
             prot = data[i, 4*protagonist_id :  4*protagonist_id + 4] 
@@ -185,16 +188,17 @@ for protagonist_id in range(fishes):
             error_i = dist[kf_matched_ind, groundtruth_matched_ind].sum()
             phi_diff = kf_phi[kf_matched_ind] - groundtruth_phi[groundtruth_matched_ind]
             error_phi = np.sum(abs(np.arctan2(np.sin(phi_diff), np.cos(phi_diff))))
-            pos_tracking_error_avg += error_i/np.size(kf, 0)
-            phi_tracking_error_avg += error_phi/np.size(kf, 0)
+            pos_tracking_error_avg += error_i/no_tracks_i
+            phi_tracking_error_avg += error_phi/no_tracks_i
 
-no_tracks_avg /= fishes
-print('{} kf tracks were created in avg.'.format(no_tracks_avg))
+no_new_tracks_avg /= fishes
+no_tracks_avg /= (fishes*timesteps)
+print('Out of the {} fishes, an avg of {:0.1f} tracks were tracked per timestep. In avg {:0.1f} kf tracks were created during the whole experiment).'.format(fishes, no_tracks_avg, no_new_tracks_avg))
 
 
 pos_tracking_error_avg /= (timesteps*fishes)
 phi_tracking_error_avg /= (timesteps*fishes)
 
-print('The avg pos tracking error is {} mm and the avg phi tracking error is {} deg.'.format(pos_tracking_error_avg, phi_tracking_error_avg*180/math.pi))
+print('The avg pos tracking error is {:0.1f} mm and the avg phi tracking error is {:0.1f} deg.'.format(pos_tracking_error_avg, phi_tracking_error_avg*180/math.pi))
 
-log_stat(experiment_type, loopname, filename, timesteps/clock_freq, fishes, n_magnitude, surface_reflections, escape_angle, speed_ratio, phi_std[0], phi_std[-1], hull_area_max/1000**2, int(sum(eaten)), no_tracks_avg, pos_tracking_error_avg/1000, phi_tracking_error_avg)
+log_stat(experiment_type, loopname, filename, math.floor(timesteps/clock_freq), fishes, n_magnitude, surface_reflections, escape_angle, speed_ratio, phi_std[0], phi_std[-1], hull_area_max/1000**2, eaten, no_tracks_avg, no_new_tracks_avg, pos_tracking_error_avg/1000, phi_tracking_error_avg)

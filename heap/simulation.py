@@ -58,7 +58,7 @@ def log_meta():
 try:
     experiment_type = sys.argv[1]
 except:
-    experiment_type = 'fountain' #'aligning'#
+    experiment_type = 'aligning'# 'fountain' #
     print('No experiment description provided, using as default', experiment_type)
 
 Fish = getattr(importlib.import_module('fishfood.' + experiment_type), 'Fish') #import Fish class directly from module specified by experiment type
@@ -68,8 +68,8 @@ for kf_file in glob.glob("./logfiles/kf*"):
     os.remove(kf_file)
 
 # Experimental Parameters
-no_fish = 3
-simulation_time = 40 # [s]
+no_fish = 10
+simulation_time = 60 # [s]
 clock_freq = 2 # [Hz]
 clock_rate = 1/clock_freq
 
@@ -77,8 +77,8 @@ clock_rate = 1/clock_freq
 v_range=3000 # visual range, [mm]
 w_blindspot=50 # width of blindspot, [mm]
 r_sphere=50 # radius of blocking sphere for occlusion, [mm]
-n_magnitude=0.0 # visual noise magnitude, [% of distance]
-surface_reflections=True
+n_magnitude=0.0 # visual noise magnitude, 0.05 [% of distance]
+surface_reflections=False#True
 
 if experiment_type == "fountain":
     pred_bool = True
