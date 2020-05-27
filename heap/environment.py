@@ -475,5 +475,3 @@ class Environment():
         correct_parsing = len(twoblob_ind) - wrong_parsing
         #print("correct_parsing twoblobs {:0.1f}, threeblobs {:0.1f}".format(correct_parsing/no_visible_fish,self.parsing_correct_parsing))
         #print("correct_parsing twoblobs {:0.1f}, wrong_parsing {:0.1f}".format(correct_parsing/no_visible_fish,wrong_parsing/no_visible_fish))
-        #if correct_parsing/no_visible_fish > self.parsing_correct_parsing:
-            #print("3rd led lost")

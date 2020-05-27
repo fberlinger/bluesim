@@ -202,7 +202,7 @@ for protagonist_id in range(fishes):
 
 no_new_tracks_avg /= fishes
 no_tracks_avg /= (fishes*timesteps)
-print('Out of the {} fishes, an avg of {:0.1f} tracks were tracked per timestep. In avg {:0.1f} kf tracks were created during the whole experiment).'.format(fishes, no_tracks_avg, no_new_tracks_avg))
+print('Out of the {} fishes, an avg of {:0.1f} tracks were tracked per timestep. In avg {:0.1f} kf tracks were created during the whole experiment).'.format(fishes-1, no_tracks_avg, no_new_tracks_avg))
 
 
 pos_tracking_error_avg = np.mean(pos_tracking_error)

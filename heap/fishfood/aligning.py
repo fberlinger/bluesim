@@ -129,12 +129,13 @@ class Fish():
     def kalman_prediction_update(self):
         nr_tracks = len(self.kf_array)
 
-        #if there are no tracks, create a new one
+        #if there are no tracks, create a new one; pw should I?
+        """
         if not nr_tracks:
             kf_new = self.init_kf(np.array([[0],[0],[0]]), np.array([0]))
             self.kf_array.append(kf_new)
             nr_tracks = 1
-
+        """
         #prediction step
         for i in range(nr_tracks):
             self.kf_array[i].predict()
@@ -434,7 +435,7 @@ class Fish():
         # subfunction: find vertically aligned leds (xyz_twoblob_candidates) and sort out reflections where >2 blobs have similar angle
         sorted_indices = np.argsort(all_angles)
         unassigned_ind = set(range(nr_blobs))
-        angle_thresh = 0.000001 / 180*np.pi # 3 / 180*np.pi#only right now to check kf performance really really small, works only in noiseless simulation # below which 2 blobs are considered a duo (3deg) or smaller: only take out the obvious reflections, leave the others to the kf
+        angle_thresh = 2 / 180*np.pi#0.000001 / 180*np.pi #  only right now to check kf performance really really small, works only in noiseless simulation # below which 2 blobs are considered a duo (3deg) or smaller: only take out the obvious reflections, leave the others to the kf
         #vert_thresh = 0.0001 #pqr normalized
         pitch_thresh = 0 / 180*np.pi # if the blobs are not far enough apart in vertical direction, assume its not a reflection but maybe the third led
 
@@ -531,120 +532,131 @@ class Fish():
 #       (return twoblob_candidate_ind, xyz_twoblob_candidate, unassigned_ind)
         #subfunction: match xyz_twoblob_candidate with predicted_blobs (input twoblob_candidate_ind, xyz_twoblob_candidate, unassigned_ind)
         #print("neighbor_ind",neighbor_ind)
+        twoblob_new_ind_set = set(range(neighbor_ind))
+
         if xyz_twoblob_candidate:
-            xyz_led1_candidate = np.array([coord[:,0] for coord in xyz_twoblob_candidate])
-            xyz_led2_candidate = np.array([coord[:,1] for coord in xyz_twoblob_candidate])
+            if predicted_blobs: #match predicted blobs and detected blobs
+                xyz_led1_candidate = np.array([coord[:,0] for coord in xyz_twoblob_candidate])
+                xyz_led2_candidate = np.array([coord[:,1] for coord in xyz_twoblob_candidate])
 
-            xyz_led1_predicted = np.array([coord[:,0] for coord in predicted_blobs])
-            xyz_led2_predicted = np.array([coord[:,1] for coord in predicted_blobs])
+                xyz_led1_predicted = np.array([coord[:,0] for coord in predicted_blobs])
+                xyz_led2_predicted = np.array([coord[:,1] for coord in predicted_blobs])
 
-            led1_dist = cdist(xyz_led1_candidate, xyz_led1_predicted, 'euclidean')
-            led2_dist = cdist(xyz_led2_candidate, xyz_led2_predicted, 'euclidean')
-            dist_thresh = 500 #[mm] #500 before
+                led1_dist = cdist(xyz_led1_candidate, xyz_led1_predicted, 'euclidean')
+                led2_dist = cdist(xyz_led2_candidate, xyz_led2_predicted, 'euclidean')
+                dist_thresh = 300 #[mm] #500 before
 
-            led1_dist = np.clip(led1_dist, 0, dist_thresh) #clip to threshold
-            led2_dist = np.clip(led2_dist, 0, dist_thresh) #clip to threshold
+                led1_dist = np.clip(led1_dist, 0, dist_thresh) #clip to threshold
+                led2_dist = np.clip(led2_dist, 0, dist_thresh) #clip to threshold
 
-            #add up normalized costs of both
-            dist_normalized = (led1_dist + led2_dist)/(2*dist_thresh)
-            #print("dist_normalized",dist_normalized)
-            xyz_twoblob_matched_ind, track_twoblob_matched_ind = linear_sum_assignment(dist_normalized)
-            xyz_twoblob_matched_ind = list(xyz_twoblob_matched_ind)
-            track_twoblob_matched_ind = list(track_twoblob_matched_ind)
+                #add up normalized costs of both
+                dist_normalized = (led1_dist + led2_dist)/(2*dist_thresh)
+                #print("dist_normalized",dist_normalized)
+                xyz_twoblob_matched_ind, track_twoblob_matched_ind = linear_sum_assignment(dist_normalized)
+                xyz_twoblob_matched_ind = list(xyz_twoblob_matched_ind)
+                track_twoblob_matched_ind = list(track_twoblob_matched_ind)
 
-            #ignore matches with too high cost
-            #print("cost",dist_normalized[xyz_twoblob_matched_ind, track_twoblob_matched_ind])
-            for i, j in zip(xyz_twoblob_matched_ind, track_twoblob_matched_ind):
-                if dist_normalized[i,j] < 0.2: #.5
-                    unassigned_ind.difference_update(twoblob_candidate_ind[i]) #the blobs from those indices are assigned now
-                else:
-                    xyz_twoblob_matched_ind.remove(i)
-                    track_twoblob_matched_ind.remove(j)
+                #ignore matches with too high cost
+                #print("cost",dist_normalized[xyz_twoblob_matched_ind, track_twoblob_matched_ind])
+                for i, j in zip(xyz_twoblob_matched_ind, track_twoblob_matched_ind):
+                    if dist_normalized[i,j] < 0.5: #.1-.5 of 500mm before
+                        unassigned_ind.difference_update(twoblob_candidate_ind[i]) #the blobs from those indices are assigned now -> remove them from unassigned_ind
+                    else:
+                        xyz_twoblob_matched_ind.remove(i)
+                        track_twoblob_matched_ind.remove(j)
 
-            #(return xyz_twoblob_matched_ind, track_twoblob_matched_ind, unassigned_ind, xyz_twoblob_new_ind)
+                #(return xyz_twoblob_matched_ind, track_twoblob_matched_ind, unassigned_ind, xyz_twoblob_new_ind)
 
-            #subfunction: search 3rd led for matched vertical pairs (input: xyz_twoblob_matched_ind, track_twoblob_matched_ind, unassigned_ind, predicted_blobs, xyz_twoblob_candidate)
-            vert_thresh = 0.2 #3rd led is allowed to be +- 20% of 86mm in height
-            hor_thresh = 0.2 #3rd led is allowed to be +- 20% of 86mm in radial distance
-            phi_thresh = pi/6 #[rad] (pi/3 before)
-
-            xyz_twoblob_matched = [xyz_twoblob_candidate[i] for i in xyz_twoblob_matched_ind]
-            xyz_twoblob_new_ind = list(set(range(neighbor_ind)).difference(set(xyz_twoblob_matched_ind))) #all the pairs that haven't been matched
-
-            i = 0
-            while i < len(xyz_twoblob_matched):
-                xyz_twoblob = xyz_twoblob_matched[i]
-                phi_pred = predicted_phi[track_twoblob_matched_ind[i]]
-                if not np.abs(xyz_twoblob[2,1]-xyz_twoblob[2,0]): #this shouldnt happen in real bots (blindspot), only because of rollover parsing
-                    continue
-                #find 3rd fitting led
-                for j in unassigned_ind: #take all unassigned_ind indices
-                    pqr_b3 = all_blobs[:,j]
-                    xyz_threeblob = self._pqr_3_to_xyz(xyz_twoblob, pqr_b3)
-                    xyz_b3 = xyz_threeblob[:,2]
-                    phi = self._orientation(xyz_threeblob)
-                    led_hor_dist = sqrt((xyz_b3[0]-xyz_twoblob[0,0])**2 + (xyz_b3[1]-xyz_twoblob[1,0])**2)
-                    led_vert_dist = abs(xyz_b3[2]-xyz_twoblob[2,0])
-                    #print(j, "predb3 to xyz_b3 norm", np.linalg.norm(xyz_b3_predicted - xyz_b3), "vert", led_vert_dist/U_LED_DZ, "hor", (np.abs(led_hor_dist-U_LED_DX)/U_LED_DX))
-                    if led_vert_dist/U_LED_DZ < vert_thresh and (abs(led_hor_dist-U_LED_DX)/U_LED_DX) < hor_thresh and abs(np.arctan2(sin(phi-phi_pred), cos(phi-phi_pred))) < phi_thresh: #calculated led distances should be wihting range of real led distance DX, DZ
+                #subfunction: search 3rd led for matched vertical pairs (input: xyz_twoblob_matched_ind, track_twoblob_matched_ind, unassigned_ind, predicted_blobs, xyz_twoblob_candidate)
+                #now optimal assignment, not greedy
+                cost_thresh = 0.3 #pw tune, but better smaller than 0.33 to not allow phi to cross phi_thresh
+                phi_thresh = pi/4
+                cost_weights = np.array([1, 1, 1], dtype=float) #hor, vert, phi; change if desired
+                cost_weights /= np.sum(cost_weights)
+                unassigned_ind_list = list(unassigned_ind)
+                cost_mat = np.empty((len(xyz_twoblob_matched_ind), len(unassigned_ind_list)))
+                for idx_i, i in enumerate(xyz_twoblob_matched_ind):
+                    xyz_twoblob = xyz_twoblob_candidate[i]
+                    phi_pred = predicted_phi[track_twoblob_matched_ind[idx_i]]
+                    #find 3rd fitting led
+                    for idx_j, j in enumerate(unassigned_ind_list): #take all unassigned_ind indices
+                        pqr_b3 = all_blobs[:,j]
+                        xyz_threeblob = self._pqr_3_to_xyz(xyz_twoblob, pqr_b3)
+                        xyz_b3 = xyz_threeblob[:,2]
+                        phi = self._orientation(xyz_threeblob)
+                        led_hor_dist = sqrt((xyz_b3[0]-xyz_twoblob[0,0])**2 + (xyz_b3[1]-xyz_twoblob[1,0])**2)
+                        led_vert_dist = abs(xyz_b3[2]-xyz_twoblob[2,0])
+                        phi_dist = abs(np.arctan2(sin(phi-phi_pred), cos(phi-phi_pred)))
+                        #normalize
+                        led_hor_dist = abs(led_hor_dist-U_LED_DX)/U_LED_DX
+                        led_vert_dist = led_vert_dist/U_LED_DZ
+                        phi_dist = phi_dist/phi_thresh
+                        cost_mat[idx_i, idx_j] = np.dot(cost_weights, np.array([np.clip(led_hor_dist, 0, 1), np.clip(led_vert_dist, 0, 1), np.clip(phi_dist, 0, 1)]))
+                        #print(j, "predb3 to xyz_b3 norm", np.linalg.norm(xyz_b3_predicted - xyz_b3), "vert", led_vert_dist/U_LED_DZ, "hor", (np.abs(led_hor_dist-U_LED_DX)/U_LED_DX))
+                duplet_matched_idx, thirdblob_matched_idx = linear_sum_assignment(cost_mat)
+                for idx_i, idx_j in zip(duplet_matched_idx, thirdblob_matched_idx):
+                    if cost_mat[idx_i, idx_j] < cost_thresh:
+                        i = xyz_twoblob_matched_ind[idx_i]
+                        j = unassigned_ind_list[idx_j]
+                        xyz_twoblob = xyz_twoblob_candidate[i]
+                        pqr_b3 = all_blobs[:,j]
+                        xyz_threeblob = self._pqr_3_to_xyz(xyz_twoblob, pqr_b3)
+                        phi = self._orientation(xyz_threeblob)
                         xyz_threeblob_matched.append(xyz_threeblob)
-                        blob3_matched_ind.append([twoblob_candidate_ind[xyz_twoblob_matched_ind[i]][0],twoblob_candidate_ind[xyz_twoblob_matched_ind[i]][1],j])
-                        xyz_threeblob_matched_ind.append(xyz_twoblob_matched_ind[i])
-                        track_threeblob_matched_ind.append(track_twoblob_matched_ind[i])
+                        blob3_matched_ind.append([twoblob_candidate_ind[i][0],twoblob_candidate_ind[i][1],j])
+                        xyz_threeblob_matched_ind.append(i)
+                        track_threeblob_matched_ind.append(track_twoblob_matched_ind[idx_i])
                         phi_matched.append(phi)
-                        unassigned_ind.remove(j)
+                        unassigned_ind.discard(j)
                         j_neighbor_ind = np.argwhere([j in x for x in twoblob_candidate_ind])
                         if any(j_neighbor_ind): #blob j has been assigned now, but it also belongs to another twoblob pair
-                            neighbor_ind -= 1
                             unassigned_ind.difference_update(twoblob_candidate_ind[j_neighbor_ind[0,0]]) # remove the blob that has been paired with j, cause it's probably its reflection
-                            try:
-                                xyz_twoblob_new_ind.remove(j_neighbor_ind[0,0])
-                            except ValueError:
-                                pass # its not in the list
-                        break
-                    else:
+                            twoblob_new_ind_set.discard(j_neighbor_ind[0,0])
+
+            #subfunction: second round to find 3rd led for xyz_twoblob_new: the ones that havent matched with an existing track and want to start a new track (input)
+            twoblob_new_ind_set.difference_update(xyz_threeblob_matched_ind)
+            xyz_twoblob_new_ind = list(twoblob_new_ind_set)
+            cost_thresh = 0.2#  0.00001#pw tune, in noisefree world:
+            cost_weights = np.array([1, 1], dtype=float) #hor, vert; change if desired
+            cost_weights /= np.sum(cost_weights)
+            cost_mat = np.empty((len(xyz_twoblob_new_ind), len(unassigned_ind)))
+            unassigned_ind_list = list(unassigned_ind)
+
+            #fill cost matrix to find 3rd led
+            for idx_i, i in enumerate(xyz_twoblob_new_ind):
+                xyz_twoblob = xyz_twoblob_candidate[i]
+                for idx_j, j in enumerate(unassigned_ind_list):
+                    if j in xyz_twoblob: #blob j already needed for my duplet -> impossible assignment, 'inf' cost
+                        cost_mat[idx_i, idx_j] = 10000
                         continue
-                i += 1
-
-            #subfunction: second round to find 3rd led for xyz_twoblob_new: the once that havent matched with an existing track and want to start a new track (input)
-            additional_twoblob_ind = list(set(xyz_twoblob_matched_ind).difference(xyz_threeblob_matched_ind))
-            for i in additional_twoblob_ind:
-                #print("additional", i)
-                xyz_twoblob_new_ind.append(i)
-                unassigned_ind.update(twoblob_candidate_ind[i])
-
-            xyz_twoblob_new = [xyz_twoblob_candidate[i] for i in xyz_twoblob_new_ind]
-            i = 0
-            while i < len(xyz_twoblob_new):
-                xyz_twoblob = xyz_twoblob_new[i]
-                if not np.abs(xyz_twoblob[2,1]-xyz_twoblob[2,0]): #this shouldnt happen in real bots (blindspot), only because of rollover parsing
-                    continue
-                #find 3rd fitting led
-                for j in [x for x in unassigned_ind if (x != twoblob_candidate_ind[xyz_twoblob_new_ind[i]][0] and x != twoblob_candidate_ind[xyz_twoblob_new_ind[i]][1])]:
                     pqr_b3 = all_blobs[:,j]
                     xyz_threeblob = self._pqr_3_to_xyz(xyz_twoblob, pqr_b3)
                     xyz_b3 = xyz_threeblob[:,2]
                     led_hor_dist = sqrt((xyz_b3[0]-xyz_twoblob[0,0])**2 + (xyz_b3[1]-xyz_twoblob[1,0])**2)
                     led_vert_dist = abs(xyz_b3[2]-xyz_twoblob[2,0])
-                    if led_vert_dist/U_LED_DZ < vert_thresh and (abs(led_hor_dist-U_LED_DX)/U_LED_DX) < hor_thresh: #calculated led distances should be wihting range of real led distance DX, DZ
-                        xyz_threeblob_new.append(xyz_threeblob)
-                        xyz_threeblob_new_ind.append(xyz_twoblob_new_ind[i])
-                        phi_new.append(self._orientation(xyz_threeblob))
-                        unassigned_ind.remove(j)
-                        unassigned_ind.difference_update(twoblob_candidate_ind[xyz_twoblob_new_ind[i]])
-                        j_neighbor_ind = np.argwhere([j in x for x in twoblob_candidate_ind])
-                        if any(j_neighbor_ind): #blob j has been assigned now, but it also belongs to another twoblob pair --> remove that one
-                            neighbor_ind -= 1
-                            unassigned_ind.difference_update(twoblob_candidate_ind[j_neighbor_ind[0,0]])
-                        break
-                    else:
-                        continue
-                i += 1
+                    #normalize
+                    led_hor_dist = abs(led_hor_dist-U_LED_DX)/U_LED_DX
+                    led_vert_dist = led_vert_dist/U_LED_DZ
+                    cost_mat[idx_i, idx_j] = np.dot(cost_weights, np.array([np.clip(led_hor_dist, 0, 1), np.clip(led_vert_dist, 0, 1)]))
+            #assign cost
+            duplet_matched_idx, thirdblob_matched_idx = linear_sum_assignment(cost_mat)
+            for idx_i, idx_j in zip(duplet_matched_idx, thirdblob_matched_idx):
+                if cost_mat[idx_i, idx_j] < cost_thresh:
+                    i = xyz_twoblob_new_ind[idx_i]
+                    j = unassigned_ind_list[idx_j]
+                    xyz_twoblob = xyz_twoblob_candidate[i]
+                    pqr_b3 = all_blobs[:,j]
+                    xyz_threeblob = self._pqr_3_to_xyz(xyz_twoblob, pqr_b3)
+                    phi = self._orientation(xyz_threeblob)
+                    xyz_threeblob_new.append(xyz_threeblob)
+                    xyz_threeblob_new_ind.append(i)
+                    phi_new.append(self._orientation(xyz_threeblob))
+
 
         #this function evaluates the percentage of correctly matched leds
 
         self.environment.count_wrong_parsing(np.array(twoblob_candidate_ind)[xyz_twoblob_matched_ind], blob3_matched_ind)
-        #self.environment.count_wrong_matches(np.array(twoblob_candidate_ind), blob3_matched_ind)
+        #self.environment.count_wrong_parsing(np.array(twoblob_candidate_ind), blob3_matched_ind)
         #print("matched nr", len(track_threeblob_matched_ind), "new nr", len(xyz_threeblob_new))
         return (xyz_threeblob_matched, phi_matched, xyz_threeblob_new, phi_new, track_threeblob_matched_ind)
 
