@@ -43,6 +43,9 @@ class Environment():
         for i in range(np.shape(self.pos)[0]):
             self.update_leds(i)
 
+        self.leds_random_permutation = []
+        self.parsing_wrong = []
+        self.parsing_correct = []
 
         # Initialize robot states
         self.init_states()
@@ -360,6 +363,7 @@ class Environment():
             all_blobs = np.append(all_blobs, relative_coordinates, axis=1)
 
         p = np.random.permutation(np.shape(all_blobs)[1]) # mix up into random order
+        self.leds_random_permutation = p
         return all_blobs[:,p]
 
     def get_rel_pos_pred(self, source_index):
@@ -434,3 +438,42 @@ class Environment():
             pred_rel_pos = np.array([])
 
         return pred_rel_pos
+
+    #this function evaluates the percentage of correctly matched leds
+    def count_wrong_parsing(self, twoblob_ind, threeblob_ind):
+        p = self.leds_random_permutation
+        no_visible_fish = len(p)//(3*(1+self.surface_reflections))
+        wrong_parsing = 0
+
+        for threeblob in threeblob_ind:
+            orig_ind = [p[threeblob[0]], p[threeblob[1]], p[threeblob[2]]]
+            #orig_ind.sort() not necessary, the blobs should already be in the right order from the parsing
+            if orig_ind[0]%3 != 0 or orig_ind[2] >= 3*no_visible_fish: #make sure none of the blobs is a reflection
+                wrong_parsing += 1
+            elif orig_ind[1]-orig_ind[0] != 1:
+                wrong_parsing += 1
+            elif orig_ind[2]-orig_ind[1] != 1:
+                wrong_parsing += 1
+
+        correct_parsing = len(threeblob_ind) - wrong_parsing
+        # calc percentage and save in self
+        # print("wrong_parsing", wrong_parsing, "correct_parsing", correct_parsing)
+        self.parsing_wrong = wrong_parsing / no_visible_fish
+        self.parsing_correct =  correct_parsing / no_visible_fish
+        #print("led1 reflection", led1_wrong)
+
+        #for debugging to see if things go wrong when looking for triplet or already for duplet:
+        wrong_parsing = 0
+        for twoblob in twoblob_ind:
+           orig_ind = [p[twoblob[0]], p[twoblob[1]]]
+           orig_ind.sort()
+           if orig_ind[0]%3 != 0 or orig_ind[1] >= 3*no_visible_fish:
+               wrong_parsing += 1
+           elif orig_ind[1]-orig_ind[0] != 1:
+               wrong_parsing += 1
+
+        correct_parsing = len(twoblob_ind) - wrong_parsing
+        #print("correct_parsing twoblobs {:0.1f}, threeblobs {:0.1f}".format(correct_parsing/no_visible_fish,self.parsing_correct_parsing))
+        #print("correct_parsing twoblobs {:0.1f}, wrong_parsing {:0.1f}".format(correct_parsing/no_visible_fish,wrong_parsing/no_visible_fish))
+        #if correct_parsing/no_visible_fish > self.parsing_correct_parsing:
+            #print("3rd led lost")

@@ -29,15 +29,15 @@ def init_log_stat():
     print('creating stat logfile')
     with open('./logfiles/{}_stat.csv'.format(loopname), 'w') as f:
         f.truncate()
-        f.write('experiment, filename, runtime [s], no_fish, n_magnitude, surface_reflections, escape_angle [rad], pred_speed_ratio, phi_std_init, phi_std_end, hull_area_max [m^2], pred_eaten, #tracks/timestep avg, #tracks overall avg, kf pos tracking error avg [m], kf phi tracking error avg [rad]  \n')
+        f.write('experiment, filename, runtime [s], no_fish, n_magnitude, surface_reflections, escape_angle [rad], pred_speed_ratio, phi_std_init, phi_std_end, hull_area_max [m^2], pred_eaten, #tracks/timestep avg, #tracks overall avg, kf pos tracking error avg [m], kf phi tracking error avg [rad], parsing_wrong_matches_avg [%], parsing_correct_matches_avg [%], phi std over time [rad]\n')
 
 
-def log_stat(experiment_type, loopname, filename, runtime, fishes, noise, surface_reflections, escape_angle, speed_ratio, phi_std_init, phi_std_end, hull_area_max, eaten, no_tracks_avg, no_new_tracks_avg, pos_tracking_error_avg, phi_tracking_error_avg):
+def log_stat(experiment_type, loopname, filename, runtime, fishes, noise, surface_reflections, escape_angle, speed_ratio, phi_std, hull_area_max, eaten, no_tracks_avg, no_new_tracks_avg, pos_tracking_error_avg, phi_tracking_error_avg, parsing_wrong_matches_avg, parsing_correct_matches_avg):
     """Logs the meta data of the experiment
     """
     with open('./logfiles/{}_stat.csv'.format(loopname), 'a+') as f:
         f.write(
-            '{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}\n'.format( 
+            '{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}'.format(
                 experiment_type,
                 filename,
                 runtime,
@@ -46,17 +46,21 @@ def log_stat(experiment_type, loopname, filename, runtime, fishes, noise, surfac
                 surface_reflections,
                 escape_angle,
                 speed_ratio,
-                phi_std_init,
-                phi_std_end,
+                phi_std[0],
+                phi_std[-1],
                 hull_area_max,
                 eaten,
                 no_tracks_avg,
                 no_new_tracks_avg,
                 pos_tracking_error_avg,
-                phi_tracking_error_avg
+                phi_tracking_error_avg,
+                parsing_wrong_matches_avg,
+                parsing_correct_matches_avg
             )
         )
-
+        for item in phi_std:
+            f.write(",{}".format(item))
+        f.write("\n")
 
 # Load Data
 try:
@@ -130,14 +134,14 @@ if pred_bool:
         p = ((rel_pos[:, 0])**2 / a**2 +  (rel_pos[:, 1])**2 / b**2)
         eaten += np.any(p < 1) #and consider delta z !
     print('{} fish out of {} got eaten.'.format(eaten, fishes))
-    
+
     #check pred_speed
     v_max_avg = 0
     for ii in range(fishes):
         v_xy = np.sqrt(data[:, 4*(ii+fishes)]**2 + data[:, 4*(ii+fishes) + 1]**2)
         v_max = max(v_xy)
         v_max_avg += v_max
-    
+
     v_max_avg /= fishes
     speed_ratio = pred_speed/v_max_avg
     print('The avg pred to fish speed ratio is {}.'.format(speed_ratio))
@@ -155,9 +159,12 @@ print('The largest hull area is {:0.5f} m^2.'.format(hull_area_max/1000**2))
 #log kf data¨
 no_tracks_avg = 0
 no_new_tracks_avg = 0
-pos_tracking_error_avg = 0 
-phi_tracking_error_avg = 0   
-  
+pos_tracking_error = []
+phi_tracking_error = []
+parsing_wrong_matches = []
+parsing_correct_matches = []
+
+
 for protagonist_id in range(fishes):
     data_kf = np.genfromtxt('./logfiles/kf_{}.csv'.format(protagonist_id), delimiter=',')
     data_kf = data_kf[1:,:] #cut title row
@@ -165,40 +172,49 @@ for protagonist_id in range(fishes):
     tracks = np.unique(data_kf[:,0]).astype(int)
     no_new_tracks = len(tracks) - pred_bool
     no_new_tracks_avg += no_new_tracks
-    #tracking   
+    #tracking
     kf_iterations = np.unique(data_kf[:,1]).astype(int)
     for i in range(timesteps):#kf_iterations: #all iterations
-        kf = data_kf[np.argwhere(data_kf[:,1] == i).ravel(), 2:6] #no_fishx4
+        kf = data_kf[np.argwhere(data_kf[:,1] == i).ravel(), 2:] #no_fishx(4 + 2) pos, phi, wrong matches, correct matches
         no_tracks_i = np.size(kf, 0)
         no_tracks_avg += no_tracks_i
-        if no_tracks_i:
+        if no_tracks_i: #if not empty
+            parsing_wrong_matches.append(kf[0, 4])
+            parsing_correct_matches.append(kf[0, 5])
             kf_pos = kf[:, :3]
             kf_phi = kf[:, 3]
-            prot = data[i, 4*protagonist_id :  4*protagonist_id + 4] 
+            prot = data[i, 4*protagonist_id :  4*protagonist_id + 4]
             prot_phi = prot[3]
-            all_fish = np.array([data[i, 4*ii :  4*ii + 4] for ii in range(fishes) if ii != protagonist_id]) #for matching only us pos, no phi
+            all_fish = np.array([data[i, 4*ii :  4*ii + 4] for ii in range(fishes) if ii != protagonist_id]) #for matching only use pos, no phi
 
             rel_pos_unrot = (all_fish[:, :3]- prot[:3])
             R = np.array([[math.cos(prot_phi), math.sin(prot_phi), 0],[-math.sin(prot_phi), math.cos(prot_phi), 0],[0,0,1]]) #rotate by phi around z axis to transform from global to robot frame
             groundtruth_pos = (R @ rel_pos_unrot.T).T
             groundtruth_phi = np.arctan2(np.sin(all_fish[:, 3] - prot_phi), np.cos(all_fish[:, 3] - prot_phi))
-            
-            dist = cdist(kf_pos, groundtruth_pos, 'euclidean')    
+
+            dist = cdist(kf_pos, groundtruth_pos, 'euclidean')
             kf_matched_ind, groundtruth_matched_ind = linear_sum_assignment(dist)
             error_i = dist[kf_matched_ind, groundtruth_matched_ind].sum()
             phi_diff = kf_phi[kf_matched_ind] - groundtruth_phi[groundtruth_matched_ind]
             error_phi = np.sum(abs(np.arctan2(np.sin(phi_diff), np.cos(phi_diff))))
-            pos_tracking_error_avg += error_i/no_tracks_i
-            phi_tracking_error_avg += error_phi/no_tracks_i
+            pos_tracking_error.append(error_i/no_tracks_i)
+            phi_tracking_error.append(error_phi/no_tracks_i)
 
 no_new_tracks_avg /= fishes
 no_tracks_avg /= (fishes*timesteps)
 print('Out of the {} fishes, an avg of {:0.1f} tracks were tracked per timestep. In avg {:0.1f} kf tracks were created during the whole experiment).'.format(fishes, no_tracks_avg, no_new_tracks_avg))
 
 
-pos_tracking_error_avg /= (timesteps*fishes)
-phi_tracking_error_avg /= (timesteps*fishes)
+pos_tracking_error_avg = np.mean(pos_tracking_error)
+phi_tracking_error_avg = np.mean(phi_tracking_error)
 
 print('The avg pos tracking error is {:0.1f} mm and the avg phi tracking error is {:0.1f} deg.'.format(pos_tracking_error_avg, phi_tracking_error_avg*180/math.pi))
 
-log_stat(experiment_type, loopname, filename, math.floor(timesteps/clock_freq), fishes, n_magnitude, surface_reflections, escape_angle, speed_ratio, phi_std[0], phi_std[-1], hull_area_max/1000**2, eaten, no_tracks_avg, no_new_tracks_avg, pos_tracking_error_avg/1000, phi_tracking_error_avg)
+parsing_wrong_matches_avg = np.mean(parsing_wrong_matches)
+parsing_correct_matches_avg = np.mean(parsing_correct_matches)
+
+
+print('In avg {:0.1f}% of all visible triplets are wrongly parsed, {:0.1f}% are correctly parsed; {:0.1f}% are not parsed at all despite being visible.'.format(parsing_wrong_matches_avg*100, parsing_correct_matches_avg*100, (1-parsing_wrong_matches_avg-parsing_correct_matches_avg)*100))
+
+
+log_stat(experiment_type, loopname, filename, math.floor(timesteps/clock_freq), fishes, n_magnitude, surface_reflections, escape_angle, speed_ratio, phi_std, hull_area_max/1000**2, eaten, no_tracks_avg, no_new_tracks_avg, pos_tracking_error_avg/1000, phi_tracking_error_avg, parsing_wrong_matches_avg, parsing_correct_matches_avg)

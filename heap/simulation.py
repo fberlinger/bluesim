@@ -58,7 +58,7 @@ def log_meta():
 try:
     experiment_type = sys.argv[1]
 except:
-    experiment_type = 'aligning'# 'fountain' #
+    experiment_type = 'aligning'#fountain' #
     print('No experiment description provided, using as default', experiment_type)
 
 Fish = getattr(importlib.import_module('fishfood.' + experiment_type), 'Fish') #import Fish class directly from module specified by experiment type
@@ -78,7 +78,7 @@ v_range=3000 # visual range, [mm]
 w_blindspot=50 # width of blindspot, [mm]
 r_sphere=50 # radius of blocking sphere for occlusion, [mm]
 n_magnitude=0.0 # visual noise magnitude, 0.05 [% of distance]
-surface_reflections=False#True
+surface_reflections=True#True
 
 if experiment_type == "fountain":
     pred_bool = True
@@ -94,7 +94,7 @@ else:
 fish_specs = (v_range, w_blindspot, r_sphere, n_magnitude, surface_reflections, escape_angle, pred_speed, fish_factor_speed)
 # Standard Tank
 arena_list = [1780, 1780, 1170]
-arena_list = [2*x for x in arena_list] #pw for fountain more space for now
+#arena_list = [2*x for x in arena_list] #pw comment for fountain more space
 arena = np.array(arena_list)
 arena_center = arena / 2.0
 
@@ -103,8 +103,8 @@ initial_spread = 500
 pos = np.zeros((no_fish, 4))
 vel = np.zeros((no_fish, 4))
 pos[:,:2] = initial_spread * (np.random.rand(no_fish, 2) - 0.5) + arena_center[:2] # x,y
-pos[:,2] = 1000 * np.random.rand(1, no_fish) # z, all fish a same noise-free depth results in LJ lock
-pos[:,3] = 2*math.pi * (np.random.rand(1, no_fish) - 0.5)# phi
+pos[:,2] = 500 * np.random.rand(1, no_fish) #500 + np.array(range(no_fish))*100 # z, all fish a same noise-free depth results in LJ lock
+pos[:,3] = 2*math.pi * (np.random.rand(1, no_fish) - 0.5)# phi # np.zeros((1, no_fish)) #
 
 # Create Environment, Dynamics, And Heap
 environment = Environment(pos, vel, fish_specs, arena, pred_bool, clock_freq)

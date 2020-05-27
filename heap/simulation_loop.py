@@ -66,7 +66,7 @@ Fish = getattr(importlib.import_module('fishfood.' + experiment_type), 'Fish') #
 #remove all previous kf log files
 for kf_file in glob.glob("./logfiles/kf*"):
     os.remove(kf_file)
-    
+
 simulation_time = 60 # [s]
 clock_freq = 2 # [Hz]
 clock_rate = 1/clock_freq
@@ -75,13 +75,13 @@ clock_rate = 1/clock_freq
 v_range=3000 # visual range, [mm]
 w_blindspot=50 # width of blindspot, [mm]
 r_sphere=50 # radius of blocking sphere for occlusion, [mm]
-n_magnitude=0.05 # visual noise magnitude, [% of distance]
+n_magnitude=0.0 # visual noise magnitude, [% of distance]
 surface_reflections=True
 
 if experiment_type == "fountain":
     pred_bool = True
     escape_angle = 110 * math.pi/180 # escape angle for fish, [rad]
-    fish_factor_speed = 0.0 #slow down fish from max speed with this factor, keep at 0.05
+    fish_factor_speed = 0.05 #slow down fish from max speed with this factor, keep at 0.05
     pred_speed = 50 # [mm/s] (good range: 40-50, max fish speed is approx 60mm/s with fish_factor_speed = 0.05)
 else:
     pred_bool = False
@@ -99,11 +99,11 @@ arena_center = arena / 2.0
 initial_spread = 500
 
 # Experimental Parameters
-loopname = 'aligning_noise0.05_refTrue'
+loopname = 'aligning_pi_6thresh_noise0.0_refTrue'
 no_repetitions = 10
 no_fish_range = range(5, 16, 5)
 
-for no_fish in sorted(list(no_fish_range) * no_repetitions): 
+for no_fish in sorted(list(no_fish_range) * no_repetitions):
 
     # Standard Surface Initialization
     pos = np.zeros((no_fish, 4))
@@ -133,12 +133,12 @@ for no_fish in sorted(list(no_fish_range) * no_repetitions):
     print('#### WELCOME TO BLUESIM ####')
     print('Progress:', end=' ', flush=True)
     t_start = time.time()
-    
+
     simulation_steps = (no_fish+pred_bool)*simulation_time*clock_freq # overall
 
     steps = 0
     prog_incr = 0.1
-    
+
     while True:
         progress = steps/simulation_steps
         if progress >= prog_incr:
@@ -146,7 +146,7 @@ for no_fish in sorted(list(no_fish_range) * no_repetitions):
             prog_incr += 0.1
         if steps >= simulation_steps:
                 break
-    
+
         (uuid, event_time) = H.delete_min()
         duration = random.gauss(clock_rate, 0.1*clock_rate)
         if uuid < no_fish:
@@ -154,7 +154,7 @@ for no_fish in sorted(list(no_fish_range) * no_repetitions):
         else:
             predator.run(duration)
         H.insert(uuid, event_time + duration)
-    
+
         steps += 1
 
     print('| Duration: {} sec\n -'.format(round(time.time()-t_start)))
