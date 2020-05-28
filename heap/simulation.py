@@ -77,7 +77,7 @@ clock_rate = 1/clock_freq
 v_range=3000 # visual range, [mm]
 w_blindspot=50 # width of blindspot, [mm]
 r_sphere=50 # radius of blocking sphere for occlusion, [mm]
-n_magnitude=0.0 # visual noise magnitude, 0.05 [% of distance]
+n_magnitude=0.01 # visual noise magnitude, 0.05 [% of distance]
 surface_reflections=True#True
 
 if experiment_type == "fountain":

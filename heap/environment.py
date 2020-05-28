@@ -342,7 +342,7 @@ class Environment():
         leds = []
         for robot in robots:
             if self.n_magnitude:
-                magnitudes = self.n_magnitude * np.array([self.dist[source_id][robot]]).T # 10% of distance
+                magnitudes = self.n_magnitude * U_LED_DX # 10% of distance
                 noise = magnitudes * (np.random.rand(3, 1) - 0.5) # zero-mean uniform noise
                 leds.append(self.leds_pos[robot] + noise) #add same noise on all 3 leds
             else:
@@ -473,5 +473,5 @@ class Environment():
                wrong_parsing += 1
 
         correct_parsing = len(twoblob_ind) - wrong_parsing
-        #print("correct_parsing twoblobs {:0.1f}, threeblobs {:0.1f}".format(correct_parsing/no_visible_fish,self.parsing_correct_parsing))
+        #print("wrong_parsing twoblobs {:0.1f}, threeblobs {:0.1f}".format(wrong_parsing/no_visible_fish,self.parsing_wrong))
         #print("correct_parsing twoblobs {:0.1f}, wrong_parsing {:0.1f}".format(correct_parsing/no_visible_fish,wrong_parsing/no_visible_fish))

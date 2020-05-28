@@ -414,6 +414,7 @@ class Fish():
         """
         xyz_twoblob_candidate = []
         twoblob_candidate_ind = []
+        twoblob_candidate_ref = []
         xyz_twoblob_matched_ind = []
         xyz_threeblob_matched = []
         xyz_threeblob_matched_ind = []
@@ -424,6 +425,7 @@ class Fish():
         xyz_threeblob_new_ind = []
         blob3_matched_ind = []
 
+        my_z = self.environment.pos[self.id, 2] #info from depth sensor
 
         nr_blobs = np.shape(all_blobs)[1]
         if nr_blobs < 3: # 0 robots
@@ -435,8 +437,8 @@ class Fish():
         # subfunction: find vertically aligned leds (xyz_twoblob_candidates) and sort out reflections where >2 blobs have similar angle
         sorted_indices = np.argsort(all_angles)
         unassigned_ind = set(range(nr_blobs))
-        angle_thresh = 2 / 180*np.pi#0.000001 / 180*np.pi #  only right now to check kf performance really really small, works only in noiseless simulation # below which 2 blobs are considered a duo (3deg) or smaller: only take out the obvious reflections, leave the others to the kf
-        #vert_thresh = 0.0001 #pqr normalized
+        #print(all_angles[sorted_indices])
+        angle_thresh =  3 / 180*np.pi #0.000001 / 180*np.pi #only right now to check kf performance really really small, works only in noiseless simulation # below which 2 blobs are considered a duo (3deg) or smaller: only take out the obvious reflections, leave the others to the kf
         pitch_thresh = 0 / 180*np.pi # if the blobs are not far enough apart in vertical direction, assume its not a reflection but maybe the third led
 
         i = 0 # blob_ind
@@ -448,18 +450,16 @@ class Fish():
             b2 = all_blobs[:,ind_2]
             # if 2 blobs are too far apart, ignore first one and check next 2
             dangle = abs(all_angles[ind_1] - all_angles[ind_2])
-            #vert_dist = abs(b2[2] - b1[2]) #check that vertically aligned blobs have a certain min distance
-            #print("vert_dist",vert_dist)
             pitch1 = np.arctan2(b1[2], np.sqrt(b1[0]**2 + b1[1]**2))
             pitch2 = np.arctan2(b2[2], np.sqrt(b2[0]**2 + b2[1]**2))
-            if not(dangle < angle_thresh and abs(pitch1 - pitch2) > pitch_thresh):#vert_dist > vert_thresh):
-                # if dangle < angle_thresh and vert_dist < vert_thresh: #assume blobs are identical if the angles and vert distance is close together --> discard one of them
-                #     unassigned_ind.remove(ind_1) # pw is this necessary?? why??
+            # if dangle < angle_thresh and abs(pitch1 - pitch2) < pitch_thresh*(1-(pitch1 + pitch2)/pi):
+            #     print("tok",abs(pitch1 - pitch2))
+            if not(dangle < angle_thresh and abs(pitch1 - pitch2) > pitch_thresh):
                 i += 1
                 continue
 
             # else, continue and add 2 blobs
-
+            #print(abs(pitch1 - pitch2))
             # check for reflections
             ref = 0
 
@@ -467,13 +467,14 @@ class Fish():
                 ind_3 = sorted_indices[i+2]
                 b3 = all_blobs[:,ind_3]
                 dangle = abs(all_angles[ind_3] - all_angles[ind_1])
-                #vert_dist = abs(all_blobs[2,sorted_indices[i+2]] - all_blobs[2,sorted_indices[i]]) #check that vertically aligned blobs have a certain min distance
                 pitch3 = np.arctan2(b3[2], np.sqrt(b3[0]**2 + b3[1]**2))
-                if dangle < angle_thresh and min(abs(pitch1 - pitch3), abs(pitch2 - pitch3)) > pitch_thresh: #vert_dist > vert_thresh: # a 3rd blob from same direction?
+                if dangle < angle_thresh and min(abs(pitch1 - pitch3), abs(pitch2 - pitch3)) > pitch_thresh: # a 3rd blob from same direction?
                     #print("surfref 1, ",min(abs(pitch1 - pitch3), abs(pitch2 - pitch3)))
                     ref = 1
                     # who is closest to the surface?
-                    min_pitch = np.argmin([pitch1, pitch2, pitch3]) + 1 # smallest angle (negative) is closest to surface and will be discarded
+                    min_pitch = np.argmin([pitch1, pitch2, pitch3]) + 1  # smallest angle (negative) is closest to surface and will be discarded
+                    #if sorted[pitch1, pitch2, pitch3][1] < 0 or
+
                     if min_pitch == 1:
                         ind_remove = ind_1
                         b1 = b3
@@ -495,7 +496,7 @@ class Fish():
                         pitch1 = np.arctan2(b1[2], sqrt(b1[0]**2 + b1[1]**2))
                         pitch2 = np.arctan2(b2[2], sqrt(b2[0]**2 + b2[1]**2))
                         pitch4 = np.arctan2(b4[2], sqrt(b4[0]**2 + b4[1]**2))
-                        if dangle < angle_thresh and min(abs(pitch1 - pitch4), abs(pitch2 - pitch4)) > pitch_thresh:#vert_dist > vert_thresh: # a 4th blob from same direction?
+                        if dangle < angle_thresh and min(abs(pitch1 - pitch4), abs(pitch2 - pitch4)) > pitch_thresh: # a 4th blob from same direction?
                             #print("surfref 2, ",min(abs(pitch1 - pitch4), abs(pitch2 - pitch4)))
                             ref = 2
                             # who is closest to the surface?
@@ -524,11 +525,16 @@ class Fish():
 
             pqr_twoblob = np.transpose(np.vstack((b1, b2)))
             xyz_twoblob = self._pqr_to_xyz(pqr_twoblob)
-            xyz_twoblob_candidate.append(xyz_twoblob)
-            twoblob_candidate_ind.append([ind_1, ind_2])
+            if ref > 0 and my_z + xyz_twoblob[2,0] >= 0: #the other fish cant be above the water surface and only accept duplets that have at least one reflection
+                xyz_twoblob_candidate.append(xyz_twoblob)
+                twoblob_candidate_ind.append([ind_1, ind_2])
+                twoblob_candidate_ref.append(ref)
+                neighbor_ind += 1
+            else:
+                unassigned_ind.remove(ind_1) #this is probably a reflection
 
             i += 2 + ref
-            neighbor_ind += 1
+
 #       (return twoblob_candidate_ind, xyz_twoblob_candidate, unassigned_ind)
         #subfunction: match xyz_twoblob_candidate with predicted_blobs (input twoblob_candidate_ind, xyz_twoblob_candidate, unassigned_ind)
         #print("neighbor_ind",neighbor_ind)
@@ -558,19 +564,22 @@ class Fish():
 
                 #ignore matches with too high cost
                 #print("cost",dist_normalized[xyz_twoblob_matched_ind, track_twoblob_matched_ind])
+
                 for i, j in zip(xyz_twoblob_matched_ind, track_twoblob_matched_ind):
-                    if dist_normalized[i,j] < 0.5: #.1-.5 of 500mm before
+                    if dist_normalized[i,j] < 0.3: #.1-.5 of 500mm before
                         unassigned_ind.difference_update(twoblob_candidate_ind[i]) #the blobs from those indices are assigned now -> remove them from unassigned_ind
                     else:
                         xyz_twoblob_matched_ind.remove(i)
                         track_twoblob_matched_ind.remove(j)
+                #print(len(xyz_twoblob_matched_ind),len(unassigned_ind))
+
 
                 #(return xyz_twoblob_matched_ind, track_twoblob_matched_ind, unassigned_ind, xyz_twoblob_new_ind)
 
                 #subfunction: search 3rd led for matched vertical pairs (input: xyz_twoblob_matched_ind, track_twoblob_matched_ind, unassigned_ind, predicted_blobs, xyz_twoblob_candidate)
                 #now optimal assignment, not greedy
                 cost_thresh = 0.3 #pw tune, but better smaller than 0.33 to not allow phi to cross phi_thresh
-                phi_thresh = pi/4
+                phi_thresh = pi/3
                 cost_weights = np.array([1, 1, 1], dtype=float) #hor, vert, phi; change if desired
                 cost_weights /= np.sum(cost_weights)
                 unassigned_ind_list = list(unassigned_ind)
@@ -600,6 +609,8 @@ class Fish():
                         j = unassigned_ind_list[idx_j]
                         xyz_twoblob = xyz_twoblob_candidate[i]
                         pqr_b3 = all_blobs[:,j]
+                        # if abs(xyz_twoblob[0,0]) < 30 and abs(xyz_twoblob[1,0]) <30:
+                        #     print(xyz_twoblob)
                         xyz_threeblob = self._pqr_3_to_xyz(xyz_twoblob, pqr_b3)
                         phi = self._orientation(xyz_threeblob)
                         xyz_threeblob_matched.append(xyz_threeblob)
@@ -615,14 +626,44 @@ class Fish():
 
             #subfunction: second round to find 3rd led for xyz_twoblob_new: the ones that havent matched with an existing track and want to start a new track (input)
             twoblob_new_ind_set.difference_update(xyz_threeblob_matched_ind)
+            if twoblob_new_ind_set:
+                twoblob_new_ind = list(twoblob_new_ind_set)
+                twoblob_new_ref = [twoblob_candidate_ref[i] for i in twoblob_new_ind]
+                temp, twoblob_new_ind = zip(*sorted(zip(twoblob_new_ref, twoblob_new_ind), reverse=True)) #sort twoblob_new_ind so that the duplets which found a reflection have priority in greedy algorithm below
+                #unassigned_ind.difference_update([twoblob_candidate_ind[i] for i in twoblob_new_ind]) should the triplets  with ref>0 be removed from unassigned ind?? in a noiseless world yes, does it still work with noise?
+                hor_thresh = 0.2#.2
+                vert_thresh = 0.2#.2
+                for idx_i, i in enumerate(twoblob_new_ind):
+                    xyz_twoblob = xyz_twoblob_candidate[i]
+                    #find 3rd fitting led
+                    for j in [x for x in unassigned_ind if x not in twoblob_candidate_ind[i]]:
+                        pqr_b3 = all_blobs[:,j]
+                        xyz_threeblob = self._pqr_3_to_xyz(xyz_twoblob, pqr_b3)
+                        xyz_b3 = xyz_threeblob[:,2]
+                        led_hor_dist = sqrt((xyz_b3[0]-xyz_twoblob[0,0])**2 + (xyz_b3[1]-xyz_twoblob[1,0])**2)
+                        led_vert_dist = abs(xyz_b3[2]-xyz_twoblob[2,0])
+                        if led_vert_dist/U_LED_DZ < vert_thresh and (abs(led_hor_dist-U_LED_DX)/U_LED_DX) < hor_thresh: #calculated led distances should be wihting range of real led distance DX, DZ
+                            xyz_threeblob_new.append(xyz_threeblob)
+                            xyz_threeblob_new_ind.append(i)
+                            phi_new.append(self._orientation(xyz_threeblob))
+                            unassigned_ind.remove(j)
+                            unassigned_ind.difference_update(twoblob_candidate_ind[i])
+                            j_neighbor_ind = np.argwhere([j in x for x in twoblob_candidate_ind])
+                            if any(j_neighbor_ind): #blob j has been assigned now, but it also belongs to another twoblob pair --> remove that one
+                                unassigned_ind.difference_update(twoblob_candidate_ind[j_neighbor_ind[0,0]])
+                            break
+
+
+            """ maybe munkres doesnt make sense for non matches, better greedy, cause blobs in pairs are at the same time also unassigned
             xyz_twoblob_new_ind = list(twoblob_new_ind_set)
-            cost_thresh = 0.2#  0.00001#pw tune, in noisefree world:
+            cost_thresh = 0.2# 0.00001#0pw tune, in noisefree world:
             cost_weights = np.array([1, 1], dtype=float) #hor, vert; change if desired
             cost_weights /= np.sum(cost_weights)
-            cost_mat = np.empty((len(xyz_twoblob_new_ind), len(unassigned_ind)))
             unassigned_ind_list = list(unassigned_ind)
+            cost_mat = np.empty((len(xyz_twoblob_new_ind), len(unassigned_ind_list)))
 
             #fill cost matrix to find 3rd led
+            #print(len(xyz_threeblob_matched_ind),len(xyz_twoblob_new_ind), len(unassigned_ind_list))
             for idx_i, i in enumerate(xyz_twoblob_new_ind):
                 xyz_twoblob = xyz_twoblob_candidate[i]
                 for idx_j, j in enumerate(unassigned_ind_list):
@@ -652,9 +693,8 @@ class Fish():
                     xyz_threeblob_new_ind.append(i)
                     phi_new.append(self._orientation(xyz_threeblob))
 
-
+        """
         #this function evaluates the percentage of correctly matched leds
-
         self.environment.count_wrong_parsing(np.array(twoblob_candidate_ind)[xyz_twoblob_matched_ind], blob3_matched_ind)
         #self.environment.count_wrong_parsing(np.array(twoblob_candidate_ind), blob3_matched_ind)
         #print("matched nr", len(track_threeblob_matched_ind), "new nr", len(xyz_threeblob_new))
@@ -716,7 +756,7 @@ class Fish():
         v_des = 0#0.2
         self.home_orient(phi_des, v_des)
         #self.depth_ctrl_vert(center_pos[2])
-        z_des = 500 #+ self.id *100 #so that they are in different heights
+        z_des = 500 + self.id *100 #so that they are in different heights
         self.depth_ctrl_vert(z_des-self.environment.pos[self.id][2])
         """ debugging
         self.dorsal = 0
