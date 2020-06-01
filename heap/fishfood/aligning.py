@@ -414,7 +414,7 @@ class Fish():
         """
         xyz_twoblob_candidate = []
         twoblob_candidate_ind = []
-        twoblob_candidate_ref = []
+        #twoblob_candidate_ref = []
         xyz_twoblob_matched_ind = []
         xyz_threeblob_matched = []
         xyz_threeblob_matched_ind = []
@@ -528,10 +528,10 @@ class Fish():
             if ref > 0 and my_z + xyz_twoblob[2,0] >= 0: #the other fish cant be above the water surface and only accept duplets that have at least one reflection
                 xyz_twoblob_candidate.append(xyz_twoblob)
                 twoblob_candidate_ind.append([ind_1, ind_2])
-                twoblob_candidate_ref.append(ref)
+                #twoblob_candidate_ref.append(ref)
                 neighbor_ind += 1
-            else:
-                unassigned_ind.remove(ind_1) #this is probably a reflection
+            # else:
+            #     unassigned_ind.remove(ind_1) #this is probably a reflection
 
             i += 2 + ref
 
@@ -551,7 +551,6 @@ class Fish():
                 led1_dist = cdist(xyz_led1_candidate, xyz_led1_predicted, 'euclidean')
                 led2_dist = cdist(xyz_led2_candidate, xyz_led2_predicted, 'euclidean')
                 dist_thresh = 300 #[mm] #500 before
-
                 led1_dist = np.clip(led1_dist, 0, dist_thresh) #clip to threshold
                 led2_dist = np.clip(led2_dist, 0, dist_thresh) #clip to threshold
 
@@ -628,8 +627,8 @@ class Fish():
             twoblob_new_ind_set.difference_update(xyz_threeblob_matched_ind)
             if twoblob_new_ind_set:
                 twoblob_new_ind = list(twoblob_new_ind_set)
-                twoblob_new_ref = [twoblob_candidate_ref[i] for i in twoblob_new_ind]
-                temp, twoblob_new_ind = zip(*sorted(zip(twoblob_new_ref, twoblob_new_ind), reverse=True)) #sort twoblob_new_ind so that the duplets which found a reflection have priority in greedy algorithm below
+                #twoblob_new_ref = [twoblob_candidate_ref[i] for i in twoblob_new_ind] #only needed if duplets without ref are even added
+                #temp, twoblob_new_ind = zip(*sorted(zip(twoblob_new_ref, twoblob_new_ind), reverse=True)) #sort twoblob_new_ind so that the duplets which found a reflection have priority in greedy algorithm below
                 #unassigned_ind.difference_update([twoblob_candidate_ind[i] for i in twoblob_new_ind]) should the triplets  with ref>0 be removed from unassigned ind?? in a noiseless world yes, does it still work with noise?
                 hor_thresh = 0.2#.2
                 vert_thresh = 0.2#.2
@@ -756,7 +755,7 @@ class Fish():
         v_des = 0#0.2
         self.home_orient(phi_des, v_des)
         #self.depth_ctrl_vert(center_pos[2])
-        z_des = 500 + self.id *100 #so that they are in different heights
+        z_des = 500 #+ self.id *100 #so that they are in different heights
         self.depth_ctrl_vert(z_des-self.environment.pos[self.id][2])
         """ debugging
         self.dorsal = 0

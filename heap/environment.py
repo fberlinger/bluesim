@@ -342,9 +342,9 @@ class Environment():
         leds = []
         for robot in robots:
             if self.n_magnitude:
-                magnitudes = self.n_magnitude * U_LED_DX # 10% of distance
-                noise = magnitudes * (np.random.rand(3, 1) - 0.5) # zero-mean uniform noise
-                leds.append(self.leds_pos[robot] + noise) #add same noise on all 3 leds
+                magnitudes = self.n_magnitude * U_LED_DX # x% of distance between leds
+                noise = magnitudes * (np.random.rand(3, 3) - 0.5) # zero-mean uniform noise
+                leds.append(self.leds_pos[robot] + noise) #add different noise on all 3 leds
             else:
                 leds.append(self.leds_pos[robot])
 

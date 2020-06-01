@@ -69,7 +69,7 @@ for kf_file in glob.glob("./logfiles/kf*"):
 
 # Experimental Parameters
 no_fish = 10
-simulation_time = 60 # [s]
+simulation_time = 60#*5 # [s]
 clock_freq = 2 # [Hz]
 clock_rate = 1/clock_freq
 
@@ -77,7 +77,7 @@ clock_rate = 1/clock_freq
 v_range=3000 # visual range, [mm]
 w_blindspot=50 # width of blindspot, [mm]
 r_sphere=50 # radius of blocking sphere for occlusion, [mm]
-n_magnitude=0.01 # visual noise magnitude, 0.05 [% of distance]
+n_magnitude=0.05 # visual noise magnitude, 0.05 [% of distance]
 surface_reflections=True#True
 
 if experiment_type == "fountain":
@@ -94,12 +94,12 @@ else:
 fish_specs = (v_range, w_blindspot, r_sphere, n_magnitude, surface_reflections, escape_angle, pred_speed, fish_factor_speed)
 # Standard Tank
 arena_list = [1780, 1780, 1170]
-#arena_list = [2*x for x in arena_list] #pw comment for fountain more space
+#arena_list = [17800, 17800, 1170]#[2*x for x in arena_list] #pw comment for fountain more space
 arena = np.array(arena_list)
 arena_center = arena / 2.0
 
 # Standard Surface Initialization
-initial_spread = 500
+initial_spread = 500#*10
 pos = np.zeros((no_fish, 4))
 vel = np.zeros((no_fish, 4))
 pos[:,:2] = initial_spread * (np.random.rand(no_fish, 2) - 0.5) + arena_center[:2] # x,y
