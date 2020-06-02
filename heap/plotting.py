@@ -83,7 +83,8 @@ if plot_kf:
             else:
                 ax1.plot(data_kf_track[:,2], data_kf_track[:,3], marker = '*', markersize=12, label='kf_{}'.format(ii), color = colors[idx,:])
                 ax2.plot(data_kf_track[:,1]/clock_freq, np.arctan2(np.sin(data_kf_track[:,5]), np.cos(data_kf_track[:,5])) * 180/np.pi, marker = '*', markersize=12, label='kf_{}'.format(ii), color = colors[idx,:])
-
+        
+        ax2.scatter(data_kf[np.argwhere(data_kf[:, 8].astype(int)!=1),1]/clock_freq, data_kf[np.argwhere(data_kf[:, 8].astype(int)!=1), 5]* 180/np.pi, marker = '*', s=500, color = 'k')
         ax1.legend()
         ax2.legend()
 

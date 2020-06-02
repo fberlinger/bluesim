@@ -164,6 +164,7 @@ phi_tracking_error = []
 parsing_wrong_matches = []
 parsing_correct_matches = []
 
+parsing_3rdled_wrong_matches= []
 
 for protagonist_id in range(fishes):
     data_kf = np.genfromtxt('./logfiles/kf_{}.csv'.format(protagonist_id), delimiter=',')
@@ -181,6 +182,7 @@ for protagonist_id in range(fishes):
         if no_tracks_i: #if not empty
             parsing_wrong_matches.append(kf[0, 4])
             parsing_correct_matches.append(kf[0, 5])
+            parsing_3rdled_wrong_matches.append(kf[0, 7])
             kf_pos = kf[:, :3]
             kf_phi = kf[:, 3]
             prot = data[i, 4*protagonist_id :  4*protagonist_id + 4]
@@ -213,8 +215,9 @@ print('The avg pos tracking error is {:0.1f} mm and the avg phi tracking error i
 parsing_wrong_matches_avg = np.mean(parsing_wrong_matches)
 parsing_correct_matches_avg = np.mean(parsing_correct_matches)
 
+parsing_3rdled_wrong_matches_avg = np.mean(parsing_3rdled_wrong_matches)
 
 print('In avg {:0.1f}% of all visible triplets are wrongly parsed, {:0.1f}% are correctly parsed; {:0.1f}% are not parsed at all despite being visible.'.format(parsing_wrong_matches_avg*100, parsing_correct_matches_avg*100, (1-parsing_wrong_matches_avg-parsing_correct_matches_avg)*100))
-
+print(parsing_3rdled_wrong_matches_avg/parsing_wrong_matches_avg * 100, '% of wrong matches are caused by third led')
 
 log_stat(experiment_type, loopname, filename, math.floor(timesteps/clock_freq), fishes, n_magnitude, surface_reflections, escape_angle, speed_ratio, phi_std, hull_area_max/1000**2, eaten, no_tracks_avg, no_new_tracks_avg, pos_tracking_error_avg/1000, phi_tracking_error_avg, parsing_wrong_matches_avg, parsing_correct_matches_avg)

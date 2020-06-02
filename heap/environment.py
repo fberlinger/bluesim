@@ -46,6 +46,10 @@ class Environment():
         self.leds_random_permutation = []
         self.parsing_wrong = []
         self.parsing_correct = []
+        self.parsing_wrong_third_led = []
+        self.parsing_vector = []
+        self.parsing_vector_track = [] #-1: wrong parsing, 0: not parsed, 1: correct parsing
+
 
         # Initialize robot states
         self.init_states()
@@ -444,23 +448,34 @@ class Environment():
         p = self.leds_random_permutation
         no_visible_fish = len(p)//(3*(1+self.surface_reflections))
         wrong_parsing = 0
-
+        third_led_wrong = 0
+        self.parsing_vector = []
         for threeblob in threeblob_ind:
             orig_ind = [p[threeblob[0]], p[threeblob[1]], p[threeblob[2]]]
-            #orig_ind.sort() not necessary, the blobs should already be in the right order from the parsing
+            #orig_ind.sort() #not necessary, the blobs should already be in the right order from the parsing
             if orig_ind[0]%3 != 0 or orig_ind[2] >= 3*no_visible_fish: #make sure none of the blobs is a reflection
-                wrong_parsing += 1
+                self.parsing_vector.append(-1)
             elif orig_ind[1]-orig_ind[0] != 1:
-                wrong_parsing += 1
+                self.parsing_vector.append(-1)
             elif orig_ind[2]-orig_ind[1] != 1:
-                wrong_parsing += 1
+                self.parsing_vector.append(-1)
+                third_led_wrong += 1
+            else:
+                self.parsing_vector.append(1)
 
+        wrong_parsing = sum(np.equal(self.parsing_vector, -1))
         correct_parsing = len(threeblob_ind) - wrong_parsing
         # calc percentage and save in self
+        # if wrong_parsing:
+        #     print("wrong 3rd led parsing", third_led_wrong/wrong_parsing, "% of all wrong")
+
         # print("wrong_parsing", wrong_parsing, "correct_parsing", correct_parsing)
         self.parsing_wrong = wrong_parsing / no_visible_fish
         self.parsing_correct =  correct_parsing / no_visible_fish
+
+        self.parsing_wrong_third_led = third_led_wrong / no_visible_fish
         #print("led1 reflection", led1_wrong)
+        #print(self.parsing_vector)
 
         #for debugging to see if things go wrong when looking for triplet or already for duplet:
         wrong_parsing = 0
