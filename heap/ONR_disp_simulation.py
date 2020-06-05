@@ -53,8 +53,8 @@ Fish = getattr(importlib.import_module('fishfood.' + experiment_file), 'Fish')
 ## Feel free to loop over multiple simulations with different parameters! ##
 
 # Experimental Parameters
-no_fish = 50
-simulation_time = 20 # [s]
+no_fish = 7
+simulation_time = 240 # [s]
 clock_freq = 2 # [Hz]
 clock_rate = 1/clock_freq
 
@@ -108,7 +108,7 @@ while True:
 
     (uuid, event_time) = H.delete_min()
     duration = random.gauss(clock_rate, 0.1*clock_rate)
-    fishes[uuid].run(duration)
+    fishes[uuid].run(duration, simulation_time/2) # half time for plateau
     H.insert(uuid, event_time + duration)
 
     steps += 1
