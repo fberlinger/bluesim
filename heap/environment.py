@@ -444,7 +444,7 @@ class Environment():
         return pred_rel_pos
 
     #this function evaluates the percentage of correctly matched leds
-    def count_wrong_parsing(self, twoblob_ind, threeblob_ind):
+    def count_wrong_parsing(self, twoblob_ind, threeblob_ind, all_blobs, id):
         p = self.leds_random_permutation
         no_visible_fish = len(p)//(3*(1+self.surface_reflections))
         wrong_parsing = 0
@@ -453,12 +453,18 @@ class Environment():
         for threeblob in threeblob_ind:
             orig_ind = [p[threeblob[0]], p[threeblob[1]], p[threeblob[2]]]
             #orig_ind.sort() #not necessary, the blobs should already be in the right order from the parsing
-            if orig_ind[0]%3 != 0 or orig_ind[2] >= 3*no_visible_fish: #make sure none of the blobs is a reflection
+            if orig_ind[0]%3 != 0 or sum(np.array(orig_ind) >= 3*no_visible_fish) > 0: #make sure none of the blobs is a reflection
                 self.parsing_vector.append(-1)
+                #if id == 1:
+                #    print("wrong 0", all_blobs[:,threeblob[0]],all_blobs[:,threeblob[1]],all_blobs[:,threeblob[2]] )
             elif orig_ind[1]-orig_ind[0] != 1:
                 self.parsing_vector.append(-1)
+                #if id == 1:
+                #    print("wrong 1", all_blobs[:,threeblob[0]],all_blobs[:,threeblob[1]],all_blobs[:,threeblob[2]] , "correct",  all_blobs[:,threeblob[0]],    all_blobs[:,np.where(p==orig_ind[0]+1)[0][0]],    all_blobs[:,np.where(p==orig_ind[0]+2)[0][0]])
             elif orig_ind[2]-orig_ind[1] != 1:
                 self.parsing_vector.append(-1)
+                #if id == 1:
+                #    print("wrong 2", all_blobs[:,threeblob[0]],all_blobs[:,threeblob[1]],all_blobs[:,threeblob[2]] , "correct",  all_blobs[:,threeblob[0]],   all_blobs[:,np.where(p==orig_ind[0]+1)[0][0]],     all_blobs[:,np.where(p==orig_ind[0]+2)[0][0]])
                 third_led_wrong += 1
             else:
                 self.parsing_vector.append(1)

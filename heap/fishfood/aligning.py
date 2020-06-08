@@ -441,18 +441,19 @@ class Fish():
         sorted_indices = np.argsort(all_angles)
         unassigned_ind = set(range(nr_blobs))
         #print(all_angles[sorted_indices])
-        angle_thresh =  3 / 180*np.pi #0.000001 / 180*np.pi #only right now to check kf performance really really small, works only in noiseless simulation # below which 2 blobs are considered a duo (3deg) or smaller: only take out the obvious reflections, leave the others to the kf
+        angle_thresh =  1 / 180*np.pi #0.000001 / 180*np.pi #only right now to check kf performance really really small, works only in noiseless simulation # below which 2 blobs are considered a duo (3deg) or smaller: only take out the obvious reflections, leave the others to the kf
         pitch_thresh =  3 / 180*np.pi
         i = 0 # blob_ind
         no_duplets = 0
-        while i+3 < nr_blobs: # iterate through all blobs and fill array
+        while i+1 < nr_blobs: # iterate through all blobs and fill array
             inthresh_len = sum(all_angles[sorted_indices[i:]] < all_angles[sorted_indices[i]] + angle_thresh)
-            if inthresh_len < 4: #cant be a duplet, if its reflection is not seen (4blobs)
+            if inthresh_len < 2: #cant be a duplet with only one blob
                 i += 1
                 continue
 
             inthresh_ind = sorted_indices[i:i+inthresh_len]
             inthresh_pitch = []
+            #calculate pitch to find the two lowest leds
             for ind in inthresh_ind: #for BlueSwarm code sort my n-coord? Not available in simulation
                 pitch = np.arctan2(all_blobs[2, ind], sqrt(all_blobs[0, ind]**2 + all_blobs[1, ind]**2))
                 inthresh_pitch.append(pitch)
@@ -461,41 +462,32 @@ class Fish():
             inthresh_ind_sorted = np.array(inthresh_ind)[pitch_sort_ind]
             inthresh_blobs_sorted = np.array(all_blobs)[:, inthresh_ind_sorted]
 
-            #find correct combination of duplets from all blobs within angle_thresh
-            duplet_found = False
-            for a in range(0, floor(inthresh_len/2)-1):
-                for b in range(a+1, floor(inthresh_len/2)):
-                    pqr_twoblob = np.transpose(np.vstack((inthresh_blobs_sorted[:, b], inthresh_blobs_sorted[:, a])))
-                    xyz_twoblob = self._pqr_to_xyz(pqr_twoblob)
-                    if my_z + xyz_twoblob[2,0] < 0: #above water surface -> impossible
-                        continue
-
-                    z_ref_pred1 = - (2*my_z + xyz_twoblob[2,0]) #predicted z coordinate of reflection
-                    z_ref_pred2 = - (2*my_z + xyz_twoblob[2,1])
-                    pitch_ref_pred1 = np.arctan2(z_ref_pred1, sqrt(xyz_twoblob[0,0]**2 + xyz_twoblob[1,0]**2))
-                    pitch_ref_pred2 = np.arctan2(z_ref_pred2, sqrt(xyz_twoblob[0,1]**2 + xyz_twoblob[1,1]**2))
-
-                    pitch_diff1 = abs(inthresh_pitch_sorted - pitch_ref_pred1)
-                    pitch_diff2 = abs(inthresh_pitch_sorted - pitch_ref_pred2)
-                    ind_min_diff1 = np.argwhere(pitch_diff1 < pitch_thresh)
-                    ind_min_diff2 = np.argwhere(pitch_diff2 < pitch_thresh)
-                    ind_min_unique = np.unique(np.concatenate((ind_min_diff1, ind_min_diff2)))
-
-                    if len(ind_min_diff1) and len(ind_min_diff2) and len(ind_min_unique) > 1: #has two different reflections
-                        xyz_twoblob_candidate.append(xyz_twoblob)
-                        twoblob_candidate_ind.append([inthresh_ind_sorted[b], inthresh_ind_sorted[a]])
-                        unassigned_ind.difference_update(inthresh_ind_sorted[ind_min_unique]) #remove all ind which are close to predicted reflection
-                        duplet_found = True
-                        break
-
-                if duplet_found:
-                    break
-
-            if duplet_found:
-                no_duplets += 1
-                i += inthresh_len
-            else:
+            pqr_twoblob = np.transpose(np.vstack((inthresh_blobs_sorted[:, 1], inthresh_blobs_sorted[:, 0]))) #try LED1: second lowest pitch, LED2: lowest pitch
+            xyz_twoblob = self._pqr_to_xyz(pqr_twoblob)
+            if my_z + xyz_twoblob[2,0] < 0: #LED 1 is above water surface -> impossible# try different combination eg [2] and [1]?
                 i += 1
+                continue
+
+            xyz_twoblob_candidate.append(xyz_twoblob)
+            twoblob_candidate_ind.append([inthresh_ind_sorted[1], inthresh_ind_sorted[0]]) #take those two with lowest pitch
+            no_duplets += 1
+            i += inthresh_len
+
+            #check for reflection to remove it
+            z_ref_pred1 = - (2*my_z + xyz_twoblob[2,0]) #predicted z coordinate of reflection
+            z_ref_pred2 = - (2*my_z + xyz_twoblob[2,1])
+            pitch_ref_pred1 = np.arctan2(z_ref_pred1, sqrt(xyz_twoblob[0,0]**2 + xyz_twoblob[1,0]**2))
+            pitch_ref_pred2 = np.arctan2(z_ref_pred2, sqrt(xyz_twoblob[0,1]**2 + xyz_twoblob[1,1]**2))
+
+            pitch_diff1 = abs(inthresh_pitch_sorted - pitch_ref_pred1)
+            pitch_diff2 = abs(inthresh_pitch_sorted - pitch_ref_pred2)
+            ind_ref = np.argwhere(np.logical_or(pitch_diff1 < pitch_thresh, pitch_diff2 < pitch_thresh)).ravel()
+            if len(ind_ref):
+                #print("removed refl")
+                unassigned_ind.difference_update(inthresh_ind_sorted[ind_ref]) #remove all ind which are close to predicted reflection
+
+            #no all blobs within angle thresh that are not lowest duplet nor fit to reflection prediction are left as unassigned_ind
+
 
 #       (return twoblob_candidate_ind, xyz_twoblob_candidate, unassigned_ind)
         #subfunction: match xyz_twoblob_candidate with predicted_blobs (input twoblob_candidate_ind, xyz_twoblob_candidate, unassigned_ind)
@@ -523,9 +515,9 @@ class Fish():
 
                 #ignore matches with too high cost
                 #print("cost",dist_normalized[xyz_twoblob_matched_ind, track_twoblob_matched_ind])
-
+                cost_thresh = 0.3 #pw tune, needs to be smaller than 0.5 to ensure no led is saturated in thresh, before 0.5 of 300mm
                 for i, j in zip(xyz_twoblob_matched_ind, track_twoblob_matched_ind):
-                    if dist_normalized[i,j] < 0.5: #pw tune, before 0.5 of 300mm
+                    if dist_normalized[i,j] < cost_thresh:
                         unassigned_ind.difference_update(twoblob_candidate_ind[i]) #the blobs from those indices are assigned now -> remove them from unassigned_ind
                     else:
                         xyz_twoblob_matched_ind.remove(i)
@@ -544,7 +536,7 @@ class Fish():
                 for idx_i, i in enumerate(xyz_twoblob_matched_ind):
                     xyz_twoblob = xyz_twoblob_candidate[i]
                     phi_pred = predicted_phi[track_twoblob_matched_ind[idx_i]]
-                    #find 3rd fitting led
+                    #find 3rd fitting led: fill in cost matrix
                     for idx_j, j in enumerate(unassigned_ind_list): #take all unassigned_ind indices
                         pqr_b3 = all_blobs[:,j]
                         xyz_threeblob = self._pqr_3_to_xyz(xyz_twoblob, pqr_b3)
@@ -560,6 +552,7 @@ class Fish():
                         cost_mat[idx_i, idx_j] = np.dot(cost_weights, np.array([np.clip(led_hor_dist, 0, 1), np.clip(led_vert_dist, 0, 1), np.clip(phi_dist, 0, 1)]))
                         #print(j, "predb3 to xyz_b3 norm", np.linalg.norm(xyz_b3_predicted - xyz_b3), "vert", led_vert_dist/U_LED_DZ, "hor", (np.abs(led_hor_dist-U_LED_DX)/U_LED_DX))
                 duplet_matched_idx, thirdblob_matched_idx = linear_sum_assignment(cost_mat)
+                #check if cost of matched 3rd led is smaller than thresh
                 for idx_i, idx_j in zip(duplet_matched_idx, thirdblob_matched_idx):
                     if cost_mat[idx_i, idx_j] < cost_thresh:
                         i = xyz_twoblob_matched_ind[idx_i]
@@ -609,7 +602,7 @@ class Fish():
         #print(len(twoblob_new_ind_set), len(phi_new))
 
         #this function evaluates the percentage of correctly matched leds
-        self.environment.count_wrong_parsing(np.array(twoblob_candidate_ind)[xyz_twoblob_matched_ind], blob3_matched_ind)
+        self.environment.count_wrong_parsing(np.array(twoblob_candidate_ind)[xyz_twoblob_matched_ind], blob3_matched_ind, all_blobs, self.id)
         #self.environment.count_wrong_parsing(np.array(twoblob_candidate_ind), blob3_matched_ind)
         #print("matched nr", len(track_threeblob_matched_ind), "new nr", len(xyz_threeblob_new))
         return (xyz_threeblob_matched, phi_matched, xyz_threeblob_new, phi_new, track_threeblob_matched_ind)
