@@ -53,8 +53,8 @@ Fish = getattr(importlib.import_module('fishfood.' + experiment_file), 'Fish')
 ## Feel free to loop over multiple simulations with different parameters! ##
 
 # Experimental Parameters
-no_fish = 10
-simulation_time = 120 # [s]
+no_fish = 50
+simulation_time = 300 # [s]
 clock_freq = 2 # [Hz]
 clock_rate = 1/clock_freq
 
@@ -66,7 +66,7 @@ n_magnitude=0.1 # visual noise magnitude, [% of distance]
 fish_specs = (v_range, w_blindspot, r_sphere, n_magnitude)
 
 # Standard Tank
-arena_list = [1780, 1780, 1170]
+arena_list = [17800, 17800, 11700]
 arena = np.array(arena_list)
 arena_center = arena / 2.0
 

@@ -52,9 +52,12 @@ Fish = getattr(importlib.import_module('fishfood.' + experiment_file), 'Fish')
 
 ## Feel free to loop over multiple simulations with different parameters! ##
 
+# Behavior (changed during run time in this multi-behavior simulation)
+behavior = 'circling'
+
 # Experimental Parameters
-no_fish = 10
-simulation_time = 120 # [s]
+no_fish = 20
+simulation_time = 180 # [s]
 clock_freq = 2 # [Hz]
 clock_rate = 1/clock_freq
 
@@ -105,10 +108,12 @@ while True:
         prog_incr += 0.1
     if steps >= simulation_steps:
             break
+    if steps > simulation_steps / 2:
+        behavior = 'aggregation'
 
     (uuid, event_time) = H.delete_min()
     duration = random.gauss(clock_rate, 0.1*clock_rate)
-    fishes[uuid].run(duration)
+    fishes[uuid].run(duration, behavior)
     H.insert(uuid, event_time + duration)
 
     steps += 1
