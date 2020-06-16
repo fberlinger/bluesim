@@ -2,6 +2,7 @@
 """
 from math import *
 import numpy as np
+import random
 import time
 
 
@@ -23,6 +24,9 @@ class Fish():
         self.dorsal = 0
         self.pect_r = 0
         self.pect_l = 0
+
+        # Behavior specific
+        self.target_depth = random.randint(250, 1170-250)
 
 
     def run(self, duration):
@@ -129,6 +133,26 @@ class Fish():
             else:
                 self.caudal = 0
 
+    def circling(self, robots, rel_pos):
+        sensing_angle = 25 #deg
+
+        if not robots:
+            self.pect_l = 0
+            self.pect_r = 0.5
+            self.caudal = 0.1
+            return
+        
+        someone = self.environment.see_circlers(self.id, robots, rel_pos, sensing_angle)
+
+        if someone:
+            self.pect_r = 0
+            self.pect_l = 0.5
+            self.caudal = 0.1
+        else:
+            self.pect_l = 0
+            self.pect_r = 0.5
+            self.caudal = 0.1            
+
     def move(self, robots, rel_pos, dist, duration):
         """Decision-making based on neighboring robots and corresponding move
         """
@@ -136,17 +160,8 @@ class Fish():
             target_pos, self_vel = self.dynamics.simulate_move(self.id, duration)
             return (target_pos, self_vel)
 
-        # Define your move here
-        center, magnitude = self.lj_force(robots, rel_pos, dist, r_target=1000)
-        move = center
-
-        # Global to Robot Transformation
-        phi = self.environment.pos[self.id,3]
-        r_T_g = self.environment.rot_global_to_robot(phi)
-        r_move_g = r_T_g @ move
-
-        self.depth_ctrl_vision(r_move_g)
-        self.home(r_move_g, magnitude)
+        self.circling(robots, rel_pos)
+        self.depth_ctrl_psensor(self.target_depth)
 
         self.dynamics.update_ctrl(self.dorsal, self.caudal, self.pect_r, self.pect_l)
 

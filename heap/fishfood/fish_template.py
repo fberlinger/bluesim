@@ -25,11 +25,11 @@ class Fish():
         self.pect_l = 0
 
 
-    def run(self):
+    def run(self, duration):
         """(1) Get neighbors from environment, (2) move accordingly, (3) update your state in environment
         """
         robots, rel_pos, dist, leds = self.environment.get_robots(self.id)
-        target_pos, vel = self.move(robots, rel_pos, dist)
+        target_pos, vel = self.move(robots, rel_pos, dist, duration)
         self.environment.update_states(self.id, target_pos, vel)
 
     def lj_force(self, robots, rel_pos, dist, r_target):
@@ -130,11 +130,11 @@ class Fish():
             else:
                 self.caudal = 0
 
-    def move(self, robots, rel_pos, dist):
+    def move(self, robots, rel_pos, dist, duration):
         """Decision-making based on neighboring robots and corresponding move
         """
         if not robots: # no robots, continue with ctrl from last step
-            target_pos, self_vel = self.dynamics.simulate_move(self.id)
+            target_pos, self_vel = self.dynamics.simulate_move(self.id, duration)
             return (target_pos, self_vel)
 
         # Define your move here
@@ -151,6 +151,6 @@ class Fish():
 
         self.dynamics.update_ctrl(self.dorsal, self.caudal, self.pect_r, self.pect_l)
 
-        target_pos, self_vel = self.dynamics.simulate_move(self.id)
+        target_pos, self_vel = self.dynamics.simulate_move(self.id, duration)
 
         return (target_pos, self_vel)
