@@ -2,6 +2,7 @@
 """
 from math import *
 import numpy as np
+from numpy import matlib
 import time
 import os, glob
 
@@ -40,6 +41,9 @@ class Fish():
         self.next_track_id = 0
         self.kf_phi_rotations = np.empty(0, dtype=int)
         self.kf_phi_prev = np.empty(0)
+
+        self.wo_kf = False
+        self.parsing_bool = self.environment.parsing_bool
 
 
         # Logger instance
@@ -116,7 +120,7 @@ class Fish():
                         rel_orient[i],
                         self.environment.parsing_wrong,
                         self.environment.parsing_correct,
-                        self.environment.parsing_vector_track[i],
+                        self.environment.parsing_vector_track[i], #pw comment for wo
                         self.environment.parsing_wrong_third_led
                     )
                 )
@@ -125,11 +129,15 @@ class Fish():
         """(1) Get neighbors from environment, (2) move accordingly, (3) update your state in environment
         """
         robots, rel_pos, dist, leds = self.environment.get_robots(self.id)
-        target_pos, vel = self.move(leds, duration)
+        if not self.parsing_bool:
+            target_pos, vel = self.move_no_parsing(robots, rel_pos, duration)
+        else:
+            target_pos, vel = self.move(leds, duration)
         self.environment.update_states(self.id, target_pos, vel)
 
     def kalman_prediction_update(self):
         nr_tracks = len(self.kf_array)
+        my_z = self.environment.pos[self.id, 2] #info from depth sensor
 
         #if there are no tracks, create a new one; pw should I?
         """
@@ -148,6 +156,7 @@ class Fish():
         for i in range(nr_tracks):
             predicted_state = self.kf_array[i].x
             xyz_led1 = predicted_state[0:3]
+            xyz_led1[2] = max(-my_z, xyz_led1[2])#in case prediction is over water surface
             phi_bounded = np.arctan2(sin(predicted_state[3]), cos(predicted_state[3]))
             rel_orient.append(phi_bounded)
             xyz_threeblob = self.calc_all_led_xyz(xyz_led1, rel_orient[i])
@@ -201,13 +210,16 @@ class Fish():
         #read out results
         rel_pos_led1 = []
         rel_phi = []
+        if self.wo_kf: #each track will be only one element long
+            nr_tracks = len(self.kf_array)
 
         for i in range(nr_tracks):#range(len(self.kf_array)):  the newest measurements will be ignored to prevent outliers
             estimated_state = self.kf_array[i].x
             xyz_led1 = estimated_state[0:3].ravel()
-            rel_pos_led1.append(xyz_led1)
-            phi_bounded = np.arctan2(sin(estimated_state[3]), cos(estimated_state[3]))
-            rel_phi.append(phi_bounded)
+            if not np.array_equal(xyz_led1, np.array([0, 0, 0])): #empty init
+                rel_pos_led1.append(xyz_led1)
+                phi_bounded = np.arctan2(sin(estimated_state[3]), cos(estimated_state[3]))
+                rel_phi.append(phi_bounded)
         #print("rel_pos_led1", rel_pos_led1)
         self.log_kf(rel_pos_led1, rel_phi)
         return (rel_pos_led1, rel_phi)
@@ -276,9 +288,9 @@ class Fish():
         dead_band = 20
         #print("z_des", z_des)
         if z_des > dead_band:
-            self.dorsal = min(1, 0.35 + z_des/200) #pw add d-part to p controller? check useful values
+            self.dorsal = min(1, 0.7 + z_des/500) #pw add d-part to p controller? check useful values
         else:
-            self.dorsal = 0.35 #pw what is value to hold depth?
+            self.dorsal = 0.2 #pw what is value to hold depth?
 
     def calc_all_led_xyz(self, xyz_led1, rel_orient):
         """Calculates the xyz coordinates of all three blobs based on xyz of first led and rel angle
@@ -374,14 +386,14 @@ class Fish():
         b = -2 * (x1*p3 + y1*q3)
         c = x1**2 + y1**2 - delta**2
 
-        sqrt_fix = max(b**2 - 4 * a * c, 0) #pw preventing negative sqrt, if it is too far off, the blob will be discarded later by led_hor_dist
-        d_plus = (-b + sqrt(sqrt_fix)) / (2 * a)
-        d_minus = (-b - sqrt(sqrt_fix)) / (2 * a)
+        sqrt_pos = max(b**2 - 4 * a * c, 0) #pw preventing negative sqrt, if it is too far off, the blob will be discarded later by led_hor_dist
+        d_plus = (-b + sqrt(sqrt_pos)) / (2 * a)
+        d_minus = (-b - sqrt(sqrt_pos)) / (2 * a)
 
         diff_z_plus = abs(z1 - d_plus*pqr_3[2])
         diff_z_minus = abs(z1 - d_minus*pqr_3[2])
-
-        if (diff_z_plus < diff_z_minus):
+        #print("diff_z_plus,diff_z_minus",diff_z_plus,diff_z_minus)
+        if (diff_z_plus < diff_z_minus): #choose solution for which led 3 is closer to same vertical height to led1
             xyz_3 = d_plus * pqr_3
         else:
             xyz_3 = d_minus * pqr_3
@@ -390,222 +402,279 @@ class Fish():
 
         return xyz
 
-    def calc_relative_angles(self, all_blobs): #copied and adapted from BlueSwarm Code "avoid_duplicates_by_angle" #pw split this up in env and fish part?
+    def calc_relative_angles(self, blobs): #copied and adapted from BlueSwarm Code "avoid_duplicates_by_angle" #pw split this up in env and fish part?
         """Use right and left cameras just up to the xz-plane such that the overlapping camera range disappears and there are no duplicates.
 
         Returns:
             tuple: all_blobs (that are valid, i.e. not duplicates) and their all_angles
         """
-        all_angles = np.empty(0)
-        for i in range(np.shape(all_blobs)[1]):
-            led = all_blobs[:,i]
+        angles = np.empty(0)
+        for i in range(np.shape(blobs)[1]):
+            led = blobs[:,i]
             angle = np.arctan2(led[1], led[0])
-            all_angles = np.append(all_angles, angle)
+            angles = np.append(angles, angle)
 
-        return all_angles #angles in rad!
+        return angles #angles in rad!
+    #""" new clean version
+    def remove_reflections(self, unassigned_ind, my_z, duplet, inthresh_pitch_sorted, inthresh_ind_sorted):
+        pitch_thresh =  1 / 180*np.pi #pw tune, before 1deg
+        z_ref_pred1 = - (2*my_z + duplet[2,0]) #predicted z coordinate of reflection
+        z_ref_pred2 = - (2*my_z + duplet[2,1])
+        pitch_ref_pred1 = np.arctan2(z_ref_pred1, sqrt(duplet[0,0]**2 + duplet[1,0]**2))
+        pitch_ref_pred2 = np.arctan2(z_ref_pred2, sqrt(duplet[0,1]**2 + duplet[1,1]**2))
 
-    def parse_orientation_reflections(self, all_blobs, predicted_blobs, predicted_phi):
-        """Assigns triplets of blobs to single robots
+        pitch_diff1 = abs(inthresh_pitch_sorted - pitch_ref_pred1)
+        pitch_diff2 = abs(inthresh_pitch_sorted - pitch_ref_pred2)
+        ind_ref = np.argwhere(np.logical_or(pitch_diff1 < pitch_thresh, pitch_diff2 < pitch_thresh)).ravel()
+        if len(ind_ref):
+            #print("removed {} refl, at angle".format(len(ind_ref)), np.array(all_angles)[inthresh_ind_sorted[ind_ref]])
+            unassigned_ind.difference_update(inthresh_ind_sorted[ind_ref]) #remove all ind which are close to predicted reflection
+            wrong_refl_removal = self.environment.count_wrong_refl_removal(inthresh_ind_sorted[ind_ref])
+        return unassigned_ind
 
-        Idea: Sort all blobs by the angles/directions they are coming from. Pair duos of blobs that have most similar angles add third led.
+    def parsing(self, detected_blobs, predicted_blobs, predicted_phi):
+        nr_blobs = np.shape(detected_blobs)[1]
 
-        Args:
-            all_blobs (np.array): all valid blobs from both images
-            all_angles (np.array): all angles in xy-plane of all valid blobs
-
-        Returns:
-            tuple: set of neighbors and dict with their relative positions
-        """
-        xyz_twoblob_candidate = []
-        twoblob_candidate_ind = []
-        xyz_twoblob_matched_ind = []
-        xyz_threeblob_matched = []
-        xyz_threeblob_matched_ind = []
-        track_threeblob_matched_ind = []
-        phi_matched = []
-        phi_new = []
-        xyz_threeblob_new = []
-        xyz_threeblob_new_ind = []
-        blob3_matched_ind = []
-
+        if nr_blobs < 3: # 0 robots
+            return ([], [], [], [], [])
         my_z = self.environment.pos[self.id, 2] #info from depth sensor
 
-        nr_blobs = np.shape(all_blobs)[1]
-        if nr_blobs < 3: # 0 robots
-            return (xyz_threeblob_matched, phi_matched, xyz_threeblob_new, phi_new, track_threeblob_matched_ind)
+        duplet_candidates, duplet_candidates_ind, unassigned_ind = self.find_duplet_candidates(detected_blobs, my_z)
+        if not duplet_candidates:
+            return ([], [], [], [], [])
+        #match
+        duplet_matched_ind, track_matched_duplet_ind, duplet_new_ind, unassigned_ind = self.match_duplet_tracks(duplet_candidates, duplet_candidates_ind, unassigned_ind, predicted_blobs, predicted_phi)
+        triplet_matched, phi_matched, triplet_matched_ind, track_matched_ind, duplet_new_ind, b3_matched_ind, unassigned_ind = self.find_triplet_matched(detected_blobs, duplet_candidates, duplet_candidates_ind, duplet_matched_ind, track_matched_duplet_ind, unassigned_ind, predicted_blobs) #triplet_matched is xyz of led1 and phi
+        #new track
+        triplet_new, phi_new = self.find_triplet_new(detected_blobs, duplet_candidates, duplet_candidates_ind, duplet_new_ind, unassigned_ind)
+        #this function evaluates the percentage of correctly matched leds
 
-        # find all valid blobs and their respective angles
-        all_angles = np.array(self.calc_relative_angles(all_blobs))
+        self.environment.count_wrong_parsing(duplet_candidates_ind, duplet_matched_ind, b3_matched_ind, detected_blobs, self.id)
 
-        # subfunction: find vertically aligned leds (xyz_twoblob_candidates) and sort out reflections where >2 blobs have similar angle
-        sorted_indices = np.argsort(all_angles)
+        return (triplet_matched, phi_matched, triplet_new, phi_new, track_matched_ind)
+
+    def find_duplet_candidates(self, detected_blobs, my_z):
+        duplet_candidates = []
+        duplet_candidates_ind = []
+        unassigned_ind = []
+        nr_blobs = np.shape(detected_blobs)[1]
+
+        detected_blobs_angles = self.calc_relative_angles(detected_blobs)
+        sorted_ind = np.argsort(detected_blobs_angles)
         unassigned_ind = set(range(nr_blobs))
-        #print(all_angles[sorted_indices])
-        angle_thresh =  1 / 180*np.pi #0.000001 / 180*np.pi #only right now to check kf performance really really small, works only in noiseless simulation # below which 2 blobs are considered a duo (3deg) or smaller: only take out the obvious reflections, leave the others to the kf
-        pitch_thresh =  3 / 180*np.pi
-        i = 0 # blob_ind
+        angle_thresh =  2 / 180*np.pi #0.000001 #pw tune, before 2
         no_duplets = 0
+        i = 0
         while i+1 < nr_blobs: # iterate through all blobs and fill array
-            inthresh_len = sum(all_angles[sorted_indices[i:]] < all_angles[sorted_indices[i]] + angle_thresh)
+            inthresh_len = sum(detected_blobs_angles[sorted_ind[i:]] < detected_blobs_angles[sorted_ind[i]] + angle_thresh)
             if inthresh_len < 2: #cant be a duplet with only one blob
                 i += 1
                 continue
 
-            inthresh_ind = sorted_indices[i:i+inthresh_len]
+            inthresh_ind = sorted_ind[i:i+inthresh_len]
             inthresh_pitch = []
             #calculate pitch to find the two lowest leds
-            for ind in inthresh_ind: #for BlueSwarm code sort my n-coord? Not available in simulation
-                pitch = np.arctan2(all_blobs[2, ind], sqrt(all_blobs[0, ind]**2 + all_blobs[1, ind]**2))
+            for ind in inthresh_ind:
+                pitch = np.arctan2(detected_blobs[2, ind], sqrt(detected_blobs[0, ind]**2 + detected_blobs[1, ind]**2))
                 inthresh_pitch.append(pitch)
             pitch_sort_ind = np.argsort(inthresh_pitch)[::-1] #backwards so that is starts at largest pitch = not reflection, but inside water
             inthresh_pitch_sorted = np.array(inthresh_pitch)[pitch_sort_ind]
             inthresh_ind_sorted = np.array(inthresh_ind)[pitch_sort_ind]
-            inthresh_blobs_sorted = np.array(all_blobs)[:, inthresh_ind_sorted]
+            inthresh_blobs_sorted = np.array(detected_blobs)[:, inthresh_ind_sorted]
 
-            pqr_twoblob = np.transpose(np.vstack((inthresh_blobs_sorted[:, 1], inthresh_blobs_sorted[:, 0]))) #try LED1: second lowest pitch, LED2: lowest pitch
-            xyz_twoblob = self._pqr_to_xyz(pqr_twoblob)
-            if my_z + xyz_twoblob[2,0] < 0: #LED 1 is above water surface -> impossible# try different combination eg [2] and [1]?
+            pqr_duplet = np.transpose(np.vstack((inthresh_blobs_sorted[:, 1], inthresh_blobs_sorted[:, 0]))) # LED1: second lowest pitch, LED2: lowest pitch
+            duplet = self._pqr_to_xyz(pqr_duplet)
+
+            if my_z + duplet[2,0] < 0 or np.linalg.norm(duplet[:,0]) > 4000 or np.linalg.norm(duplet[:,0]) < 50: #LED 1 is above water surface or fish too close or too far away --> impossible, continue
                 i += 1
+                print("impossible duplet")
                 continue
 
-            xyz_twoblob_candidate.append(xyz_twoblob)
-            twoblob_candidate_ind.append([inthresh_ind_sorted[1], inthresh_ind_sorted[0]]) #take those two with lowest pitch
+            duplet_candidates.append(duplet)
+            duplet_candidates_ind.append([inthresh_ind_sorted[1], inthresh_ind_sorted[0]]) #take those two with lowest pitch
             no_duplets += 1
             i += inthresh_len
 
-            #check for reflection to remove it
-            z_ref_pred1 = - (2*my_z + xyz_twoblob[2,0]) #predicted z coordinate of reflection
-            z_ref_pred2 = - (2*my_z + xyz_twoblob[2,1])
-            pitch_ref_pred1 = np.arctan2(z_ref_pred1, sqrt(xyz_twoblob[0,0]**2 + xyz_twoblob[1,0]**2))
-            pitch_ref_pred2 = np.arctan2(z_ref_pred2, sqrt(xyz_twoblob[0,1]**2 + xyz_twoblob[1,1]**2))
+        unassigned_ind = self.remove_reflections(unassigned_ind, my_z, duplet, inthresh_pitch_sorted, inthresh_ind_sorted)
 
-            pitch_diff1 = abs(inthresh_pitch_sorted - pitch_ref_pred1)
-            pitch_diff2 = abs(inthresh_pitch_sorted - pitch_ref_pred2)
-            ind_ref = np.argwhere(np.logical_or(pitch_diff1 < pitch_thresh, pitch_diff2 < pitch_thresh)).ravel()
-            if len(ind_ref):
-                #print("removed refl")
-                unassigned_ind.difference_update(inthresh_ind_sorted[ind_ref]) #remove all ind which are close to predicted reflection
+        return duplet_candidates, duplet_candidates_ind, unassigned_ind
 
-            #no all blobs within angle thresh that are not lowest duplet nor fit to reflection prediction are left as unassigned_ind
+    def match_duplet_tracks(self, duplet_candidates, duplet_candidates_ind, unassigned_ind, predicted_blobs, predicted_phi):
 
+        duplet_matched_ind = []
+        track_matched_duplet_ind = []
+        duplet_new_ind = []
+        if not predicted_blobs:
+            return duplet_matched_ind, track_matched_duplet_ind, duplet_new_ind, unassigned_ind
 
-#       (return twoblob_candidate_ind, xyz_twoblob_candidate, unassigned_ind)
-        #subfunction: match xyz_twoblob_candidate with predicted_blobs (input twoblob_candidate_ind, xyz_twoblob_candidate, unassigned_ind)
-        twoblob_new_ind_set = set(range(no_duplets))
-        if xyz_twoblob_candidate:
-            if predicted_blobs: #match predicted blobs and detected blobs
-                xyz_led1_candidate = np.array([coord[:,0] for coord in xyz_twoblob_candidate])
-                xyz_led2_candidate = np.array([coord[:,1] for coord in xyz_twoblob_candidate])
+        led1_candidate = np.array([coord[:,0] for coord in duplet_candidates])
+        led2_candidate = np.array([coord[:,1] for coord in duplet_candidates])
 
-                xyz_led1_predicted = np.array([coord[:,0] for coord in predicted_blobs])
-                xyz_led2_predicted = np.array([coord[:,1] for coord in predicted_blobs])
+        led1_predicted = np.array([coord[:,0] for coord in predicted_blobs])
+        led2_predicted = np.array([coord[:,1] for coord in predicted_blobs])
 
-                led1_dist = cdist(xyz_led1_candidate, xyz_led1_predicted, 'euclidean')
-                led2_dist = cdist(xyz_led2_candidate, xyz_led2_predicted, 'euclidean')
-                dist_thresh = 300 #[mm] #pw tune, before 300
-                led1_dist = np.clip(led1_dist, 0, dist_thresh) #clip to threshold
-                led2_dist = np.clip(led2_dist, 0, dist_thresh) #clip to threshold
+        led1_dist = cdist(led1_candidate, led1_predicted, 'euclidean')
+        led2_dist = cdist(led2_candidate, led2_predicted, 'euclidean')
+        #greedy starts here
+        D = (led1_dist + led2_dist)/2
+        dist_thresh = 400 #mm, pw tune
+        while np.min(D) < dist_thresh:
+            ind = np.unravel_index(np.argmin(D, axis=None), D.shape)
+            D[ind[0],:] = dist_thresh
+            D[:,ind[1]] = dist_thresh
+            duplet_matched_ind.append(ind[0])
+            track_matched_duplet_ind.append(ind[1])
+            unassigned_ind.difference_update(duplet_candidates_ind[ind[0]]) #those blobs are assigned now
 
-                #add up normalized costs of both
-                dist_normalized = (led1_dist + led2_dist)/(2*dist_thresh)
-                #print("dist_normalized",dist_normalized)
-                xyz_twoblob_matched_ind, track_twoblob_matched_ind = linear_sum_assignment(dist_normalized)
-                xyz_twoblob_matched_ind = list(xyz_twoblob_matched_ind)
-                track_twoblob_matched_ind = list(track_twoblob_matched_ind)
+        """Munkres
+        dist_thresh = 400 + 200*np.matlib.repmat(first_detection, np.shape(led1_dist)[0], 1) ##800 + 400*np.matlib.repmat(first_detection, np.shape(led1_dist)[0], 1) #[mm] larger thresh if first detection
 
-                #ignore matches with too high cost
-                #print("cost",dist_normalized[xyz_twoblob_matched_ind, track_twoblob_matched_ind])
-                cost_thresh = 0.3 #pw tune, needs to be smaller than 0.5 to ensure no led is saturated in thresh, before 0.5 of 300mm
-                for i, j in zip(xyz_twoblob_matched_ind, track_twoblob_matched_ind):
-                    if dist_normalized[i,j] < cost_thresh:
-                        unassigned_ind.difference_update(twoblob_candidate_ind[i]) #the blobs from those indices are assigned now -> remove them from unassigned_ind
-                    else:
-                        xyz_twoblob_matched_ind.remove(i)
-                        track_twoblob_matched_ind.remove(j)
-                #print(no_duplets, len(xyz_twoblob_matched_ind),len(unassigned_ind))
+        led1_dist = np.clip(led1_dist, 0, dist_thresh) #clip to threshold
+        led2_dist = np.clip(led2_dist, 0, dist_thresh) #clip to threshold
 
-                #(return xyz_twoblob_matched_ind, track_twoblob_matched_ind, unassigned_ind, xyz_twoblob_new_ind)
+        #add up normalized costs of both
+        dist_normalized = (led1_dist + led2_dist)/(2*dist_thresh)
+        #print("dist_normalized",dist_normalized)
+        xyz_twoblob_matched_ind_long, track_twoblob_matched_ind_long = linear_sum_assignment(dist_normalized)
+        xyz_twoblob_matched_ind_long = list(xyz_twoblob_matched_ind_long)
+        track_twoblob_matched_ind_long = list(track_twoblob_matched_ind_long)
+        cost_thresh = 0.45 #pw tune, needs to be smaller than 0.5 to ensure no led is saturated in thresh, before 0.5 of 300mm
+        xyz_twoblob_matched_ind = xyz_twoblob_matched_ind_long.copy()
+        track_twoblob_matched_ind = track_twoblob_matched_ind_long.copy()
 
-                #subfunction: search 3rd led for matched vertical pairs (input: xyz_twoblob_matched_ind, track_twoblob_matched_ind, unassigned_ind, predicted_blobs, xyz_twoblob_candidate)
-                cost_thresh = 0.2 #pw tune, but better smaller than 0.33 to not allow phi to cross phi_thresh
-                phi_thresh = pi/3 #pw tune, before pi/3
-                cost_weights = np.array([1, 1, 1], dtype=float) #hor, vert, phi; change if desired
-                cost_weights /= np.sum(cost_weights)
-                unassigned_ind_list = list(unassigned_ind)
-                cost_mat = np.empty((len(xyz_twoblob_matched_ind), len(unassigned_ind_list)))
-                for idx_i, i in enumerate(xyz_twoblob_matched_ind):
-                    xyz_twoblob = xyz_twoblob_candidate[i]
-                    phi_pred = predicted_phi[track_twoblob_matched_ind[idx_i]]
-                    #find 3rd fitting led: fill in cost matrix
-                    for idx_j, j in enumerate(unassigned_ind_list): #take all unassigned_ind indices
-                        pqr_b3 = all_blobs[:,j]
-                        xyz_threeblob = self._pqr_3_to_xyz(xyz_twoblob, pqr_b3)
-                        xyz_b3 = xyz_threeblob[:,2]
-                        phi = self._orientation(xyz_threeblob)
-                        led_hor_dist = sqrt((xyz_b3[0]-xyz_twoblob[0,0])**2 + (xyz_b3[1]-xyz_twoblob[1,0])**2)
-                        led_vert_dist = abs(xyz_b3[2]-xyz_twoblob[2,0])
-                        phi_dist = abs(np.arctan2(sin(phi-phi_pred), cos(phi-phi_pred)))
-                        #normalize
-                        led_hor_dist = abs(led_hor_dist-U_LED_DX)/U_LED_DX
-                        led_vert_dist = led_vert_dist/U_LED_DZ
-                        phi_dist = phi_dist/phi_thresh
-                        cost_mat[idx_i, idx_j] = np.dot(cost_weights, np.array([np.clip(led_hor_dist, 0, 1), np.clip(led_vert_dist, 0, 1), np.clip(phi_dist, 0, 1)]))
-                        #print(j, "predb3 to xyz_b3 norm", np.linalg.norm(xyz_b3_predicted - xyz_b3), "vert", led_vert_dist/U_LED_DZ, "hor", (np.abs(led_hor_dist-U_LED_DX)/U_LED_DX))
-                duplet_matched_idx, thirdblob_matched_idx = linear_sum_assignment(cost_mat)
-                #check if cost of matched 3rd led is smaller than thresh
-                for idx_i, idx_j in zip(duplet_matched_idx, thirdblob_matched_idx):
-                    if cost_mat[idx_i, idx_j] < cost_thresh:
-                        i = xyz_twoblob_matched_ind[idx_i]
-                        j = unassigned_ind_list[idx_j]
-                        xyz_twoblob = xyz_twoblob_candidate[i]
-                        pqr_b3 = all_blobs[:,j]
-                        xyz_threeblob = self._pqr_3_to_xyz(xyz_twoblob, pqr_b3)
-                        phi = self._orientation(xyz_threeblob)
-                        #append matched triplet
-                        xyz_threeblob_matched.append(xyz_threeblob)
-                        blob3_matched_ind.append([twoblob_candidate_ind[i][0],twoblob_candidate_ind[i][1],j])
-                        xyz_threeblob_matched_ind.append(i)
-                        track_threeblob_matched_ind.append(track_twoblob_matched_ind[idx_i])
-                        phi_matched.append(phi)
-                        unassigned_ind.discard(j)
-                        j_neighbor_ind = np.argwhere([j in x for x in twoblob_candidate_ind])
-                        if any(j_neighbor_ind): #blob j has been assigned now, but it also belongs to another twoblob pair
-                            unassigned_ind.difference_update(twoblob_candidate_ind[j_neighbor_ind[0,0]]) # remove the blob that has been paired with j, cause it's probably its reflection
-                            twoblob_new_ind_set.discard(j_neighbor_ind[0,0])
+        #ignore matches with too high cost
+        #print("cost",dist_normalized[xyz_twoblob_matched_ind, track_twoblob_matched_ind])
 
-            #subfunction: second round to find 3rd led for xyz_twoblob_new: the ones that havent matched with an existing track and want to start a new track (input)
-            twoblob_new_ind_set.difference_update(xyz_threeblob_matched_ind)
-            if twoblob_new_ind_set:
-                twoblob_new_ind = list(twoblob_new_ind_set)
-                hor_thresh = 0.1 #pw tune, before 0.2
-                vert_thresh = 0.1 #pw tune, before 0.2
-                for idx_i, i in enumerate(twoblob_new_ind):
-                    xyz_twoblob = xyz_twoblob_candidate[i]
-                    #find 3rd fitting led
-                    for j in [x for x in unassigned_ind if x not in twoblob_candidate_ind[i]]:
-                        pqr_b3 = all_blobs[:,j]
-                        xyz_threeblob = self._pqr_3_to_xyz(xyz_twoblob, pqr_b3)
-                        xyz_b3 = xyz_threeblob[:,2]
-                        led_hor_dist = sqrt((xyz_b3[0]-xyz_twoblob[0,0])**2 + (xyz_b3[1]-xyz_twoblob[1,0])**2)
-                        led_vert_dist = abs(xyz_b3[2]-xyz_twoblob[2,0])
-                        if led_vert_dist/U_LED_DZ < vert_thresh and (abs(led_hor_dist-U_LED_DX)/U_LED_DX) < hor_thresh: #calculated led distances should be wihting range of real led distance DX, DZ
-                            #print(led_vert_dist, abs(led_hor_dist-U_LED_DX))
-                            xyz_threeblob_new.append(xyz_threeblob)
-                            xyz_threeblob_new_ind.append(i)
-                            phi_new.append(self._orientation(xyz_threeblob))
-                            unassigned_ind.remove(j)
-                            unassigned_ind.difference_update(twoblob_candidate_ind[i])
-                            j_neighbor_ind = np.argwhere([j in x for x in twoblob_candidate_ind])
-                            if any(j_neighbor_ind): #blob j has been assigned now, but it also belongs to another twoblob pair --> remove that one
-                                unassigned_ind.difference_update(twoblob_candidate_ind[j_neighbor_ind[0,0]])
-                            break
-        #print(len(twoblob_new_ind_set), len(phi_new))
+        for i, j in zip(xyz_twoblob_matched_ind_long, track_twoblob_matched_ind_long):
+            if dist_normalized[i,j] < cost_thresh: #cost_thresh for munkres
+                unassigned_ind.difference_update(twoblob_candidate_ind[i]) #the blobs from those indices are assigned now -> remove them from unassigned_ind
+            else:
+                xyz_twoblob_matched_ind.remove(i)
+                track_twoblob_matched_ind.remove(j)
+        #print(no_duplets, len(xyz_twoblob_matched_ind),len(unassigned_ind))
+        """
+        #print(duplet_matched_ind, track_matched_duplet_ind, duplet_new_ind, unassigned_ind)
+        return duplet_matched_ind, track_matched_duplet_ind, duplet_new_ind, unassigned_ind
 
-        #this function evaluates the percentage of correctly matched leds
-        self.environment.count_wrong_parsing(np.array(twoblob_candidate_ind)[xyz_twoblob_matched_ind], blob3_matched_ind, all_blobs, self.id)
-        #self.environment.count_wrong_parsing(np.array(twoblob_candidate_ind), blob3_matched_ind)
-        #print("matched nr", len(track_threeblob_matched_ind), "new nr", len(xyz_threeblob_new))
-        return (xyz_threeblob_matched, phi_matched, xyz_threeblob_new, phi_new, track_threeblob_matched_ind)
+    def find_triplet_matched(self, detected_blobs, duplet_candidates, duplet_candidates_ind, duplet_matched_ind, track_matched_duplet_ind, unassigned_ind, predicted_blobs):
+
+        triplet_matched = []
+        triplet_matched_ind = []
+        track_matched_ind = []
+        phi_matched = []
+        b3_matched_ind = []
+        duplet_new_ind = set(range(len(duplet_candidates)))
+        if not (duplet_matched_ind and unassigned_ind and predicted_blobs):
+            return triplet_matched, phi_matched, triplet_matched_ind, track_matched_ind, duplet_new_ind, b3_matched_ind, unassigned_ind
+
+        dist_thresh = 50 #mm, pw tune, euclidean dist from predicted led3 to measured blob
+        unassigned_ind_list = list(unassigned_ind)
+        N0 = len(duplet_matched_ind)
+        N1 = len(unassigned_ind_list)
+        cost_mat = np.empty((N0, N1))
+        #fill in cost matrix
+        for idx_i, i in enumerate(duplet_matched_ind):
+            duplet = duplet_candidates[i]
+            b3_predicted = predicted_blobs[track_matched_duplet_ind[idx_i]][:,2]
+            for idx_j, j in enumerate(unassigned_ind_list): #take all unassigned_ind indices
+                b3_pqr = detected_blobs[:,j]
+                triplet = self._pqr_3_to_xyz(duplet, b3_pqr)
+                b3 = triplet[:,2]
+                dist = np.linalg.norm(b3 - b3_predicted)
+                cost_mat[idx_i, idx_j] = dist
+                #print(j, "predb3 to xyz_b3 norm", np.linalg.norm(xyz_b3_predicted - xyz_b3), "vert", led_vert_dist/U_LED_DZ, "hor", (np.abs(led_hor_dist-U_LED_DX)/U_LED_DX))
+
+        #greedy matching
+        D = cost_mat
+        try:
+            while np.min(D) < dist_thresh:
+                ind = np.unravel_index(np.argmin(D, axis=None), D.shape)
+                D[ind[0],:] = dist_thresh
+                D[:,ind[1]] = dist_thresh
+                i = duplet_matched_ind[ind[0]]
+                j = unassigned_ind_list[ind[1]]
+                #calc triplet
+                duplet = duplet_candidates[i]
+                b3_pqr = detected_blobs[:,j]
+                triplet = self._pqr_3_to_xyz(duplet, b3_pqr)
+                phi = self._orientation(triplet)
+                #append triplet
+                triplet_matched.append(triplet)
+                triplet_matched_ind.append(duplet_matched_ind[ind[0]])
+                track_matched_ind.append(track_matched_duplet_ind[ind[0]])
+                phi_matched.append(phi)
+                b3_matched_ind.append([duplet_candidates_ind[i][0],duplet_candidates_ind[i][1],j])
+                unassigned_ind.discard(j)
+                j_neighbor_ind = np.argwhere([j in x for x in duplet_candidates_ind]) #pw make nicer?
+                if np.size(j_neighbor_ind): #blob j has been assigned now, but it also belongs to another twoblob pair
+                    unassigned_ind.difference_update(duplet_candidates_ind[j_neighbor_ind[0,0]]) # remove the blob that has been paired with j, cause it's probably its reflection
+                    duplet_new_ind.discard(j_neighbor_ind[0,0])
+
+            duplet_new_ind.difference_update(triplet_matched_ind)
+        except:
+            print("invalid cost mat",D)
+
+        """Munkres
+
+            duplet_matched_idx, thirdblob_matched_idx = linear_sum_assignment(cost_mat)
+
+        #check if cost of matched 3rd led is smaller than thresh
+        for idx_i, idx_j in zip(duplet_matched_idx, thirdblob_matched_idx):
+            if cost_mat[idx_i, idx_j] < cost_thresh:
+                i = xyz_twoblob_matched_ind[idx_i]
+                j = unassigned_ind_list[idx_j]
+                xyz_twoblob = xyz_twoblob_candidate[i]
+                pqr_b3 = all_blobs[:,j]
+                xyz_threeblob = self._pqr_3_to_xyz(xyz_twoblob, pqr_b3)
+                phi = self._orientation(xyz_threeblob)
+                #append matched triplet
+                xyz_threeblob_matched.append(xyz_threeblob)
+                blob3_matched_ind.append([twoblob_candidate_ind[i][0],twoblob_candidate_ind[i][1],j])
+                xyz_threeblob_matched_ind.append(i)
+                track_threeblob_matched_ind.append(track_twoblob_matched_ind[idx_i])
+                phi_matched.append(phi)
+                unassigned_ind.discard(j)
+                j_neighbor_ind = np.argwhere([j in x for x in twoblob_candidate_ind])
+                if np.size(j_neighbor_ind): #blob j has been assigned now, but it also belongs to another twoblob pair
+                    unassigned_ind.difference_update(twoblob_candidate_ind[j_neighbor_ind[0,0]]) # remove the blob that has been paired with j, cause it's probably its reflection
+                    twoblob_new_ind.discard(j_neighbor_ind[0,0])"""
+
+        return triplet_matched, phi_matched, triplet_matched_ind, track_matched_ind, duplet_new_ind, b3_matched_ind, unassigned_ind
+
+    def find_triplet_new(self, detected_blobs, duplet_candidates, duplet_candidates_ind, duplet_new_ind, unassigned_ind):
+        triplet_new = []
+        phi_new = []
+
+        duplet_new_ind_list = list(duplet_new_ind)
+        unassigned_ind_list = list(unassigned_ind)
+
+        dist_thresh = 50 #mm, dist thresh of matched led3 to circle
+        for i in duplet_new_ind_list:
+            duplet = duplet_candidates[i]
+            #find 3rd fitting led
+            for j in unassigned_ind_list:
+                if j in duplet_candidates_ind[i]: #this j is already used to form the duplet
+                    continue
+                b3_pqr = detected_blobs[:,j]
+                triplet = self._pqr_3_to_xyz(duplet, b3_pqr)
+                b3 = triplet[:,2]
+                hor_dist = abs(sqrt((b3[0]-duplet[0,0])**2 + (b3[1]-duplet[1,0])**2) - U_LED_DX) #radial deviation from circle
+                vert_dist = abs(b3[2]-duplet[2,0]) #vertical deviation from circle
+                dist = sqrt(hor_dist**2 + vert_dist**2)
+                if dist < dist_thresh:
+                    phi = self._orientation(triplet)
+                    triplet_new.append(triplet)
+                    phi_new.append(phi)
+                    unassigned_ind_list.remove(j) #make this nicer pw!!!!
+                    unassigned_ind_list = [x for x in unassigned_ind_list if x not in duplet_candidates_ind[i]]
+                    j_neighbor_ind = np.argwhere([j in x for x in duplet_candidates_ind])
+                    if np.size(j_neighbor_ind): #blob j has been assigned now, but it also belongs to another twoblob pair --> remove that one and the vertical blobs from the unassigned list
+                        unassigned_ind_list = [x for x in unassigned_ind_list if x not in duplet_candidates_ind[j_neighbor_ind[0,0]]]
+                        duplet_new_ind_list = [x for x in duplet_new_ind_list if x != j_neighbor_ind[0,0]]
+
+                    break
+
+        return triplet_new, phi_new
 
     def home_orient(self, phi_des, v_des): #added pw
         """Homing behavior. Sets fin controls to move toward a desired goal orientation.
@@ -626,11 +695,11 @@ class Fish():
             self.pect_l = 0
         # target to the right
         elif heading > 0:
-            self.pect_l = min(1, 0.6 + abs(heading) / 180) *0.25 #0.5 #pw added to reduce oscillation
+            self.pect_l = min(1, 0.6 + abs(heading) / 180) *.25 #0.25 #pw added to reduce oscillation put back factor!!
             self.pect_r = 0
         # target to the left
         else:
-            self.pect_r = min(1, 0.6 + abs(heading) / 180) *0.25 #0.5#pw added to reduce oscillation
+            self.pect_r = min(1, 0.6 + abs(heading) / 180) *0.25 #0.25#pw added to reduce oscillation put back factor!!
             self.pect_l = 0
 
         self.caudal = np.clip(v_des + sin(self.dynamics.pect_angle)*(self.pect_r + self.pect_l)*F_P_max/F_caud_max, 0, 1) #to compensate for backwards movement of pectorial fins (inclided at 10deg)
@@ -639,15 +708,86 @@ class Fish():
         #     self.caudal = 0.7
         # else:
             # self.caudal = 0
+    def home_aggregate_align(self, center_pos, center_orient):
+        aggregatation_thresh = 500 #below this dont worry about aggregating
+        aggregatation_max = 2000 #aggregate at full weight when at this distance
+        center_heading = np.arctan2(center_pos[1], center_pos[0])
+        center_dist = np.linalg.norm(center_pos[0:2])
+        weight_agg = 0.75
+        weight_agg *= center_dist/aggregatation_max #make weight_agg dependent on distance from center
+        weight_align = 1 - weight_agg
+        F_P_max = 0.006 # [N] according to dynamics.py file
+        F_caud_max = 0.020 # [N]
+        angle_thresh = 2 # [deg]
+        v_des = 0 #just for init
+
+        #print(self.id, center_dist)
+        phi_des_align = center_orient
+
+        if center_dist < aggregatation_thresh or center_pos[0] > 0:
+            if center_dist < aggregatation_thresh: #dont do anything for aggregation if already close, just do aligning
+                phi_des_agg = 0
+                phi_des = phi_des_align
+                v_des = 0
+
+            elif center_pos[0] > 0: #center infront of me
+                phi_des_agg = center_heading
+                phi_des = weight_align * phi_des_align + weight_agg * phi_des_agg
+                v_des = (1 - abs(phi_des) / pi)*weight_agg
+                #v_des = np.interp(center_dist, (aggregatation_thresh, aggregatation_max), (0, 1)) # produce a v_des in range 0,1 depending on how far from center I'm away
+
+            heading = phi_des*180/pi #pw stay directly in rad
+
+            if abs(heading) < angle_thresh: #dont do anything if nearly aligned
+                self.pect_r = 0
+                self.pect_l = 0
+                v_des = 0
+            # target to the right
+            elif heading > 0:
+                self.pect_l = min(1, 0.6 + abs(heading) / 180) *.25 #0.25 #pw added to reduce oscillation put back factor!!
+                self.pect_r = 0
+            # target to the left
+            else:
+                self.pect_r = min(1, 0.6 + abs(heading) / 180) *.25 #0.25#pw added to reduce oscillation put back factor!!
+                self.pect_l = 0
+            self.caudal = np.clip(v_des + sin(self.dynamics.pect_angle)*(self.pect_r + self.pect_l)*F_P_max/F_caud_max, 0, 1) #to compensate for backwards movement of pectorial fins (inclided at 10deg)
+
+        else:
+            backwards_const = 0.5 * weight_agg
+
+            phi_des_agg = np.arctan2(sin(pi-center_heading), cos(pi-center_heading))
+            phi_des = weight_align * phi_des_align + weight_agg * phi_des_agg
+            heading = phi_des*180/pi #pw stay directly in rad
+
+            if abs(heading) < angle_thresh: #dont do anything if nearly aligned
+                pass
+            # target to the right
+            elif heading < 0:
+                self.pect_r = backwards_const
+                self.pect_l = backwards_const + min(1-backwards_const, abs(heading) / 180) *1 #0.25 #pw added to reduce oscillation put back factor!!
+            # target to the left
+            else:
+                self.pect_l = backwards_const
+                self.pect_r = backwards_const + min(1-backwards_const, abs(heading) / 180) *1 #0.25#pw added to reduce oscillation put back factor!!
+
+            if backwards_const:
+                self.caudal = 0
+            else:
+                self.caudal = np.clip(sin(self.dynamics.pect_angle)*(self.pect_r + self.pect_l)*F_P_max/F_caud_max, 0, 1)
+            #print(self.id, self.pect_l, self.pect_r)
 
     def move(self, detected_blobs, duration):
         """Decision-making based on neighboring robots and corresponding move
         """
         self.it_counter += 1
 
-        predicted_blobs, predicted_phi = self.kalman_prediction_update()
+        if self.wo_kf:
+            predicted_blobs = []
+            predicted_phi = []
+        else:
+            predicted_blobs, predicted_phi = self.kalman_prediction_update()
         # match blob triplets, give their orientation
-        (xyz_matched, phi_matched, xyz_new, phi_new, matched_track_ind) = self.parse_orientation_reflections(detected_blobs, predicted_blobs, predicted_phi)
+        (xyz_matched, phi_matched, xyz_new, phi_new, matched_track_ind) = self.parsing(detected_blobs, predicted_blobs, predicted_phi)
 
         self.kalman_measurement_update(xyz_matched, phi_matched, matched_track_ind) #predicted_ind has same length as xyz_matched and says to which track this measurement was matched
 
@@ -660,10 +800,27 @@ class Fish():
         center_pos = self.comp_center_pos(rel_pos_led1)
 
         phi_des = center_orient
-        v_des = 0#0.2
-        self.home_orient(phi_des, v_des)
+        #phi_des = (np.random.rand()-0.5)*pi #pw remove!!!
+        """
+        #to test spiral, pw:
+        target = np.array([17800/2-self.environment.pos[self.id][0], 17800/2-self.environment.pos[self.id][1]])
+        my_phi = self.environment.pos[self.id][3]
+        target_rot = np.empty((2,1))
+        target_rot[0] = cos(-my_phi)*target[0] - sin(-my_phi)*target[1]
+        target_rot[1] = sin(-my_phi)*target[0] + cos(-my_phi)*target[1]
+        pred_phi = np.arctan2(target_rot[1], target_rot[0]) #pw remove, fully towards center of tank-17800/2
+        escape_angle = 60 *pi/180
+        phi_des = np.arctan2(sin(pred_phi+escape_angle), cos(pred_phi+escape_angle))
+        v_des = 0.05#0
+        #print(self.id, phi_des)
+        if np.linalg.norm(target) < 100:
+            v_des = 0
+        """
+        v_des = 0
+        self.home_orient(phi_des, v_des) #pw comment back!!
+        #self.home_aggregate_align(center_pos, center_orient) #pw to test aggreagation
         #self.depth_ctrl_vert(center_pos[2])
-        z_des = 500 #+ self.id *100 #so that they are in different heights
+        z_des = 300 + self.id *30 #so that they are in different heights #300+
         self.depth_ctrl_vert(z_des-self.environment.pos[self.id][2])
         """ debugging
         self.dorsal = 0
@@ -671,6 +828,31 @@ class Fish():
         self.pect_r = 0
         self.pect_l = 0
         """
+        self.dynamics.update_ctrl(self.dorsal, self.caudal, self.pect_r, self.pect_l)
+        target_pos, self_vel = self.dynamics.simulate_move(self.id, duration)
+
+        return (target_pos, self_vel)
+
+    def move_no_parsing(self, robots, rel_pos, duration):
+        """Decision-making based on neighboring robots and corresponding move
+        """
+        self.it_counter += 1
+        rel_pos_led1 = []
+        rel_phi = []
+        for i in range(np.shape(rel_pos)[0]):
+            rel_pos_led1.append(rel_pos[i,:3])
+            rel_phi.append(rel_pos[i,3])
+        # find target orientation
+        center_orient = self.comp_center_orient(rel_phi)
+        center_pos = self.comp_center_pos(rel_pos_led1)
+
+        phi_des = center_orient
+
+        v_des = 0
+        self.home_orient(phi_des, v_des)
+
+        z_des = 500 + self.id *100 #so that they are in different heights #300 + self.id *30
+        self.depth_ctrl_vert(z_des-self.environment.pos[self.id][2])
         self.dynamics.update_ctrl(self.dorsal, self.caudal, self.pect_r, self.pect_l)
         target_pos, self_vel = self.dynamics.simulate_move(self.id, duration)
 

@@ -25,29 +25,33 @@ from scipy.spatial import ConvexHull, convex_hull_plot_2d
 from scipy.spatial.distance import cdist
 from scipy.optimize import linear_sum_assignment
 
+log_phi_std = True
+
 def init_log_stat():
     print('creating stat logfile')
     with open('./logfiles/{}_stat.csv'.format(loopname), 'w') as f:
         f.truncate()
-        f.write('experiment, filename, runtime [s], no_fish, n_magnitude, surface_reflections, escape_angle [rad], pred_speed_ratio, phi_std_init, phi_std_end, hull_area_max [m^2], pred_eaten, #tracks/timestep avg, #tracks overall avg, kf pos tracking error avg [m], kf phi tracking error avg [rad], parsing_wrong_matches_avg [%], parsing_correct_matches_avg [%], phi std over time [rad]\n')
+        f.write('experiment, filename, runtime [s], no_fish, n_magnitude, parsing, surface_reflections, escape_angle [rad], pred_speed_ratio, phi_std_init, phi_std_end, t_settling [s], hull_area_max [m^2], pred_eaten, #tracks/timestep avg, #tracks overall avg, kf pos tracking error avg [m], kf phi tracking error avg [rad], parsing_wrong_matches_avg [%], parsing_correct_matches_avg [%]\n')
 
 
-def log_stat(experiment_type, loopname, filename, runtime, fishes, noise, surface_reflections, escape_angle, speed_ratio, phi_std, hull_area_max, eaten, no_tracks_avg, no_new_tracks_avg, pos_tracking_error_avg, phi_tracking_error_avg, parsing_wrong_matches_avg, parsing_correct_matches_avg):
+def log_stat(experiment_type, loopname, filename, runtime, fishes, noise, parsing, surface_reflections, escape_angle, speed_ratio, phi_std_init, phi_std_end, t_settling, hull_area_max, eaten, no_tracks_avg, no_new_tracks_avg, pos_tracking_error_avg, phi_tracking_error_avg, parsing_wrong_matches_avg, parsing_correct_matches_avg):
     """Logs the meta data of the experiment
     """
     with open('./logfiles/{}_stat.csv'.format(loopname), 'a+') as f:
         f.write(
-            '{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}'.format(
+            '{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}\n'.format(
                 experiment_type,
                 filename,
                 runtime,
                 fishes,
                 noise,
+                parsing,
                 surface_reflections,
                 escape_angle,
                 speed_ratio,
-                phi_std[0],
-                phi_std[-1],
+                phi_std_init,
+                phi_std_end,
+                t_settling,
                 hull_area_max,
                 eaten,
                 no_tracks_avg,
@@ -58,6 +62,12 @@ def log_stat(experiment_type, loopname, filename, runtime, fishes, noise, surfac
                 parsing_correct_matches_avg
             )
         )
+        # for item in phi_std:
+        #     f.write(",{}".format(item))
+        # f.write("\n")
+
+def log_phi_std(phi_std, loopname):
+    with open('./logfiles/{}_phi_std.csv'.format(loopname), 'a+') as f:
         for item in phi_std:
             f.write(",{}".format(item))
         f.write("\n")
@@ -80,10 +90,12 @@ except:
 
 # Read Experimental Parameters
 clock_freq = meta['Clock frequency [Hz]']
+simulation_time = meta['Simulation time [s]']
 clock_rate = 1000/clock_freq # [ms]
 arena = meta['Arena [mm]']
 timesteps = data.shape[0]
 n_magnitude = meta['Visual noise magnitude [% of distance]']
+parsing =  meta['parsing']
 fishes = meta['Number of fishes']
 escape_angle = meta['escape_angle']
 surface_reflections = meta['surface_reflections']
@@ -114,9 +126,33 @@ phi_mean_sin = phi_mean_sin/fishes
 phi_mean = np.arctan2(phi_mean_sin, phi_mean_cos)
 phi_std = np.sqrt(-np.log(phi_mean_sin**2 + phi_mean_cos**2))
 
-print('The initial std phi is {0:.1f}.'.format(phi_std[0]))
-print('The final std phi is {0:.1f}.'.format(phi_std[-1]))
-print('The difference of mean phi is {0:.1f} deg.'.format(abs(phi_mean[-1] - phi_mean[0])*180/math.pi))
+#define std errorband! define no samples to take average over
+#errorband = 0.3
+#samples_std_end = 10
+#t_settling_idx = next(x for x, val in enumerate(phi_std[::-1]) if val > errorband)
+#t_settling = simulation_time * (1 - t_settling_idx/timesteps)
+conv_window = 15
+conv_thresh = 0.003
+rate = []
+std_log = []
+t_settling = timesteps/2 #if it doesnt settle
+
+for i in range(timesteps):
+    std_log.append(math.log(max(phi_std[i], conv_thresh))) #for zero case max
+    if len(std_log) > conv_window:
+        std_log.pop(0)
+        b, a = np.polyfit(range(i-conv_window,i), std_log, 1)
+        rate.append(-b * math.exp(a+b*i))
+        if rate[-1] < conv_thresh and rate[-1] > -conv_thresh: #should be sinking, but slowly
+            t_settling = (i-conv_window)/2 #cause clock_freq = 2, define settling time at the beginning of settled window
+            break
+
+
+phi_std_end = np.mean(phi_std[-(1+conv_window):-1])
+
+print('The setting time is {0:.1f} s.'.format(t_settling))
+print('The initial std phi is {0:4.3f}.'.format(phi_std[0]))
+print('The final std phi is {0:4.3f}.'.format(phi_std_end))
 
 #check eating area: ellipse
 eaten = []
@@ -167,7 +203,10 @@ parsing_correct_matches = []
 parsing_3rdled_wrong_matches= []
 
 for protagonist_id in range(fishes):
-    data_kf = np.genfromtxt('./logfiles/kf_{}.csv'.format(protagonist_id), delimiter=',')
+    try:
+        data_kf = np.genfromtxt('./logfiles/kf_{}.csv'.format(protagonist_id), delimiter=',')
+    except: # no kf data available
+        break
     data_kf = data_kf[1:,:] #cut title row
     #no tracks
     tracks = np.unique(data_kf[:,0]).astype(int)
@@ -220,4 +259,6 @@ parsing_3rdled_wrong_matches_avg = np.mean(parsing_3rdled_wrong_matches)
 print('In avg {:0.1f}% of all visible triplets are wrongly parsed, {:0.1f}% are correctly parsed; {:0.1f}% are not parsed at all despite being visible.'.format(parsing_wrong_matches_avg*100, parsing_correct_matches_avg*100, (1-parsing_wrong_matches_avg-parsing_correct_matches_avg)*100))
 print(parsing_3rdled_wrong_matches_avg/parsing_wrong_matches_avg * 100, '% of wrong matches are caused by third led')
 
-log_stat(experiment_type, loopname, filename, math.floor(timesteps/clock_freq), fishes, n_magnitude, surface_reflections, escape_angle, speed_ratio, phi_std, hull_area_max/1000**2, eaten, no_tracks_avg, no_new_tracks_avg, pos_tracking_error_avg/1000, phi_tracking_error_avg, parsing_wrong_matches_avg, parsing_correct_matches_avg)
+log_stat(experiment_type, loopname, filename, math.floor(timesteps/clock_freq), fishes, n_magnitude, parsing, surface_reflections, escape_angle, speed_ratio, phi_std[0], phi_std_end, t_settling, hull_area_max/1000**2, eaten, no_tracks_avg, no_new_tracks_avg, pos_tracking_error_avg/1000, phi_tracking_error_avg, parsing_wrong_matches_avg, parsing_correct_matches_avg)
+if log_phi_std:
+    log_phi_std(phi_std, loopname)

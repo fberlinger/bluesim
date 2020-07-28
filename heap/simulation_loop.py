@@ -50,7 +50,7 @@ def exp_rv(param):
 def log_meta():
     """Logs the meta data of the experiment
     """
-    meta = {'Experiment': experiment_type, 'loopname':loopname, 'Number of fishes': no_fish, 'Simulation time [s]': simulation_time, 'Clock frequency [Hz]': clock_freq, 'Arena [mm]': arena_list, 'Visual range [mm]': v_range, 'Width of blindspot [mm]': w_blindspot, 'Radius of blocking sphere [mm]': r_sphere, 'Visual noise magnitude [% of distance]': n_magnitude, 'pred_bool': pred_bool, 'escape_angle':escape_angle, 'surface_reflections': surface_reflections, 'pred_speed': pred_speed}
+    meta = {'Experiment': experiment_type, 'loopname':loopname, 'Number of fishes': no_fish, 'Simulation time [s]': simulation_time, 'Clock frequency [Hz]': clock_freq, 'Arena [mm]': arena_list, 'Visual range [mm]': v_range, 'Width of blindspot [mm]': w_blindspot, 'Radius of blocking sphere [mm]': r_sphere, 'Visual noise magnitude [% of distance]': n_magnitude, 'parsing' : parsing_bool, 'pred_bool': pred_bool, 'escape_angle':escape_angle, 'surface_reflections': surface_reflections, 'pred_speed': pred_speed}
     with open('./logfiles/{}_meta.txt'.format(filename), 'w') as f:
         json.dump(meta, f, indent=2)
 
@@ -58,7 +58,7 @@ def log_meta():
 try:
     experiment_type = sys.argv[1]
 except:
-    experiment_type = 'aligning'# 'fountain' #
+    experiment_type = 'aligning'#'fountain' #
     print('No experiment description provided, using as default', experiment_type)
 
 Fish = getattr(importlib.import_module('fishfood.' + experiment_type), 'Fish') #import Fish class directly from module specified by experiment type
@@ -75,8 +75,9 @@ clock_rate = 1/clock_freq
 v_range=3000 # visual range, [mm]
 w_blindspot=50 # width of blindspot, [mm]
 r_sphere=50 # radius of blocking sphere for occlusion, [mm]
-n_magnitude=0.0 # visual noise magnitude, [% of distance]
+n_magnitude=0.05 # visual noise magnitude, [% of distance] #0.05
 surface_reflections=True
+parsing_bool = True
 
 if experiment_type == "fountain":
     pred_bool = True
@@ -89,7 +90,7 @@ else:
     fish_factor_speed = []
     pred_speed = []
 
-fish_specs = (v_range, w_blindspot, r_sphere, n_magnitude, surface_reflections, escape_angle, pred_speed, fish_factor_speed)
+fish_specs = (v_range, w_blindspot, r_sphere, n_magnitude, surface_reflections, parsing_bool, escape_angle, pred_speed, fish_factor_speed)
 
 # Standard Tank
 arena_list = [1780, 1780, 1170]
@@ -99,19 +100,30 @@ arena_center = arena / 2.0
 initial_spread = 500
 
 # Experimental Parameters
-loopname = 'aligning_pi_6thresh_noise0.0_refTrue'
-no_repetitions = 10
-no_fish_range = range(5, 16, 5)
+loopname = 'aligning_v1'
+no_repetitions = 5
+no_fish_range = [8]#[10,20]
+
+seed_array = np.array([[ 2, 25, 15, 25, 12, 68, 26, 99, 97, 81, 24, 79, 18, 26, 69, 59,
+        76, 38, 48, 52],
+       [60, 92, 83, 90, 63, 20, 53, 42, 33, 52, 56, 70, 66, 84, 95, 27,
+        57, 26,  4,  3],
+       [ 0, 64, 72, 30, 70, 93, 44, 96, 92,  5,  0, 68,  2, 31, 22, 73,
+        70,  7, 90, 94]]) #to ensure that all loops have same initial conditions, generated with  np.random.randint(100, size = [3,20])
+i = 0
 
 for no_fish in sorted(list(no_fish_range) * no_repetitions):
-
+    
     # Standard Surface Initialization
     pos = np.zeros((no_fish, 4))
     vel = np.zeros((no_fish, 4))
+    np.random.seed(seed_array[0, i])
     pos[:,:2] = initial_spread * (np.random.rand(no_fish, 2) - 0.5) + arena_center[:2] # x,y
+    np.random.seed(seed_array[1, i])
     pos[:,2] = initial_spread * np.random.rand(1, no_fish) # z, all fish a same noise-free depth results in LJ lock
+    np.random.seed(seed_array[2, i])
     pos[:,3] = 2*math.pi * (np.random.rand(1, no_fish) - 0.5)# phi
-
+    i+=1
     # Create Environment, Dynamics, And Heap
     environment = Environment(pos, vel, fish_specs, arena, pred_bool, clock_freq)
     dynamics = Dynamics(environment)

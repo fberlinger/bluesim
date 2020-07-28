@@ -26,22 +26,19 @@ class Environment():
         self.r_sphere = fish_specs[2] # radius of blocking sphere for occlusion, [mm]
         self.n_magnitude = fish_specs[3] # visual noise magnitude, [% of distance]
         self.surface_reflections = fish_specs[4] # boolean to activate surface reflections
+        self.parsing_bool = fish_specs[5]
         self.arena_size = arena # x, y, z
         self.pred_bool = pred_bool
         self.clock_freq = clock_freq
 
         if pred_bool:
-            self.escape_angle = fish_specs[5] # escape angle for fish, [rad]
-            self.pred_speed = fish_specs[6] # predator speed, [mm/s]
+            self.escape_angle = fish_specs[6] # escape angle for fish, [rad]
+            self.pred_speed = fish_specs[7] # predator speed, [mm/s]
 
-        self.fish_factor_speed = fish_specs[7] #slow down fish from max speed with this factor
+        self.fish_factor_speed = fish_specs[8] #slow down fish from max speed with this factor
         # Parameters
         self.no_robots = self.pos.shape[0]
         self.no_states = self.pos.shape[1]
-
-        self.leds_pos = [np.zeros((3,3))]*np.size(self.pos,0) #empty init, filled with update_leds() below
-        for i in range(np.shape(self.pos)[0]):
-            self.update_leds(i)
 
         self.leds_random_permutation = []
         self.parsing_wrong = []
@@ -65,33 +62,15 @@ class Environment():
         self.init_tracking()
 
         # Initialize LEDs
-        self.leds_pos = [np.zeros((3,3))]*self.no_robots # empty init, filled with update_leds() below
+        self.leds_pos = [np.zeros((3,3))]*self.no_robots # empty init, filled below
         for robot in range(self.no_robots):
-            self.update_leds(robot)
+            pos_phi = self.pos[robot,:]
+            self.leds_pos[robot] = self.calc_leds(pos_phi)
 
     def log_to_file(self, filename):
         """Logs tracking data to file
         """
         np.savetxt('./logfiles/{}_data.txt'.format(filename), self.tracking, fmt='%.2f', delimiter=',')
-
-    def update_leds(self, source_index):
-        #pos is led1
-        pos = self.pos[source_index][0:3]
-        phi = self.pos[source_index][3]
-
-        x1 = pos[0]
-        x2 = x1
-        x3 = x1 + math.cos(phi)*U_LED_DX
-
-        y1 = pos[1]
-        y2 = y1
-        y3 = y1 + math.sin(phi)*U_LED_DX
-
-        z1 = pos[2]
-        z2 = z1 + U_LED_DZ
-        z3 = z1
-
-        self.leds_pos[source_index] = np.array([[x1, x2, x3],[y1, y2, y3],[z1, z2, z3]])
 
     def init_tracking(self):
         """Initializes tracking
@@ -119,11 +98,11 @@ class Environment():
             current_state = np.concatenate((pos,vel), axis=1)
         self.tracking = np.concatenate((self.tracking,current_state), axis=0)
 
-    def update_leds(self, source_index):
-        """ Updates the position of the three leds based on self.pos, which is the position of led1
+    def calc_leds(self, pos_phi):
+        """ Updates the position of the three leds based on pos_phi, which is the position of led1 and the fishs orientaion
         """
-        pos = self.pos[source_index,:3]
-        phi = self.pos[source_index,3]
+        pos = pos_phi[:3]
+        phi = pos_phi[3]
 
         x1 = pos[0]
         x2 = x1
@@ -137,7 +116,7 @@ class Environment():
         z2 = z1 + U_LED_DZ
         z3 = z1
 
-        self.leds_pos[source_index] = np.array([[x1, x2, x3],[y1, y2, y3],[z1, z2, z3]])
+        return np.array([[x1, x2, x3],[y1, y2, y3],[z1, z2, z3]])
 
     def init_states(self):
         """Initializes fish positions and velocities
@@ -179,9 +158,6 @@ class Environment():
         self.dist[source_id,:] = dist
         self.dist[:,source_id] = dist.T
 
-        # Update LEDs
-        self.update_leds(source_id)
-
         # Update tracking
         self.updates += 1
         if self.updates >= self.no_robots:
@@ -189,7 +165,8 @@ class Environment():
             self.update_tracking()
 
         # Update leds
-        self.update_leds(source_id)
+        pos_phi = self.pos[source_id,:]
+        self.leds_pos[source_id] = self.calc_leds(pos_phi)
 
     def get_robots(self, source_id, visual_noise=False):
         """Provides visible neighbors and relative positions and distances to a fish
@@ -203,11 +180,12 @@ class Environment():
         self.blind_spot(source_id, robots, rel_pos)
         self.occlusions(source_id, robots, rel_pos)
 
-        leds = self.calc_relative_leds(source_id, robots)
-
         if self.n_magnitude: # no overwrites of self.rel_pos and self.dist
-            n_rel_pos, n_dist = self.visual_noise(source_id, rel_pos)
+            n_rel_pos, n_dist, n_pos = self.visual_noise(source_id, rel_pos)
+            leds = self.calc_relative_leds(source_id, robots, n_pos)
             return (robots, n_rel_pos, n_dist, leds)
+
+        leds = self.calc_relative_leds(source_id, robots, self.pos)
         return (robots, rel_pos, self.dist[source_id], leds)
 
     def visual_range(self, source_id, robots):
@@ -288,12 +266,17 @@ class Environment():
     def visual_noise(self, source_id, rel_pos):
         """Adds visual noise
         """
-        magnitudes = self.n_magnitude * np.array([self.dist[source_id]]).T
-        noise = magnitudes * (np.random.rand(self.no_robots, self.no_states) - 0.5) # zero-mean uniform noise
+        noise_phi_mag = 5/180*math.pi #±5deg
+        noise_xyz_mag_max = 100 #mm max noise level (equivalent to 0.05 noise on 2m)
+        noise_xyz_mag = np.minimum(self.n_magnitude * np.array([self.dist[source_id]]).T, noise_xyz_mag_max)
+        noise_pos = noise_xyz_mag * 2 *(np.random.rand(self.no_robots, self.no_states-1) - 0.5) # zero-mean uniform noise scaled with distance
+        noise_phi = noise_phi_mag * 2 * (np.random.rand(self.no_robots, 1) - 0.5) # zero-mean uniform noise on phi
+        noise = np.append(noise_pos, noise_phi, axis = 1)
         n_rel_pos = rel_pos + noise
         n_dist = np.linalg.norm(n_rel_pos[:,:3], axis=1) # new dist without phi
+        n_pos = self.pos + noise #to have the equivalent noise to rel_pos noise, it would have to be rotated, but as its random it doesnt matter
 
-        return (n_rel_pos, n_dist)
+        return (n_rel_pos, n_dist, n_pos)
 
     def see_circlers(self, source_id, robots, rel_pos, sensing_angle):
         '''For circle formation
@@ -335,30 +318,30 @@ class Environment():
                 refl_list.append(refl)
         return refl_list
 
-    def calc_relative_leds(self, source_id, robots):
+    def calc_relative_leds(self, source_id, robots, n_pos):
         """Calculates the relative position of all detectable leds and adds their reflection if add_reflections boolean is set to True
         """
         if not robots:
             return np.empty((3,0))
 
         all_blobs = np.empty((3,0))
-
         leds = []
         for robot in robots:
             if self.n_magnitude:
-                magnitudes = self.n_magnitude * U_LED_DX # x% of distance between leds
-                noise = magnitudes * (np.random.rand(3, 3) - 0.5) # zero-mean uniform noise
-                leds.append(self.leds_pos[robot] + noise) #add different noise on all 3 leds
+                noise_led_mag = 1 #mm , noise on inidivual leds ±1mm
+                noise_led = noise_led_mag * 2* (np.random.rand(3, 3) - 0.5) # zero-mean uniform noise#add different noise on all 3 leds
+                led_pos_n = self.calc_leds(n_pos[robot,:])
+                leds.append(led_pos_n + noise_led)
             else:
                 leds.append(self.leds_pos[robot])
 
         leds_list = list(np.transpose(np.hstack(leds)))
         if self.surface_reflections:
-            refl_list = self.calc_reflections(leds_list)
+            refl_list = self.calc_reflections(leds_list) #reflections are perfectly above the original, no noise there
             leds_list = leds_list + refl_list
 
-        my_pos = self.pos[source_id,:3]
-        my_phi = self.pos[source_id,3]
+        my_pos = self.pos[source_id, :3]
+        my_phi = self.pos[source_id, 3]
         R = self.rot_global_to_robot(my_phi)
 
         for led in leds_list:
@@ -444,55 +427,74 @@ class Environment():
         return pred_rel_pos
 
     #this function evaluates the percentage of correctly matched leds
-    def count_wrong_parsing(self, twoblob_ind, threeblob_ind, all_blobs, id):
+    def count_wrong_parsing(self, duplet_candidates_ind, duplet_matched_ind, b3_matched_ind, detected_blobs, id):
         p = self.leds_random_permutation
         no_visible_fish = len(p)//(3*(1+self.surface_reflections))
         wrong_parsing = 0
         third_led_wrong = 0
         self.parsing_vector = []
-        for threeblob in threeblob_ind:
-            orig_ind = [p[threeblob[0]], p[threeblob[1]], p[threeblob[2]]]
-            #orig_ind.sort() #not necessary, the blobs should already be in the right order from the parsing
-            if orig_ind[0]%3 != 0 or sum(np.array(orig_ind) >= 3*no_visible_fish) > 0: #make sure none of the blobs is a reflection
-                self.parsing_vector.append(-1)
-                #if id == 1:
-                #    print("wrong 0", all_blobs[:,threeblob[0]],all_blobs[:,threeblob[1]],all_blobs[:,threeblob[2]] )
-            elif orig_ind[1]-orig_ind[0] != 1:
-                self.parsing_vector.append(-1)
-                #if id == 1:
-                #    print("wrong 1", all_blobs[:,threeblob[0]],all_blobs[:,threeblob[1]],all_blobs[:,threeblob[2]] , "correct",  all_blobs[:,threeblob[0]],    all_blobs[:,np.where(p==orig_ind[0]+1)[0][0]],    all_blobs[:,np.where(p==orig_ind[0]+2)[0][0]])
-            elif orig_ind[2]-orig_ind[1] != 1:
-                self.parsing_vector.append(-1)
-                #if id == 1:
-                #    print("wrong 2", all_blobs[:,threeblob[0]],all_blobs[:,threeblob[1]],all_blobs[:,threeblob[2]] , "correct",  all_blobs[:,threeblob[0]],   all_blobs[:,np.where(p==orig_ind[0]+1)[0][0]],     all_blobs[:,np.where(p==orig_ind[0]+2)[0][0]])
-                third_led_wrong += 1
-            else:
-                self.parsing_vector.append(1)
 
-        wrong_parsing = sum(np.equal(self.parsing_vector, -1))
-        correct_parsing = len(threeblob_ind) - wrong_parsing
-        # calc percentage and save in self
-        # if wrong_parsing:
-        #     print("wrong 3rd led parsing", third_led_wrong/wrong_parsing, "% of all wrong")
+        if not no_visible_fish:
+            self.parsing_wrong_third_led = 0
+            self.parsing_wrong = 0
+            self.parsing_correct = 0
+        else:
+            for threeblob in b3_matched_ind:
+                orig_ind = [p[threeblob[0]], p[threeblob[1]], p[threeblob[2]]]
+                #orig_ind.sort() #not necessary, the blobs should already be in the right order from the parsing
+                if orig_ind[0]%3 != 0 or sum(np.array(orig_ind) >= 3*no_visible_fish) > 0: #make sure none of the blobs is a reflection
+                    self.parsing_vector.append(-1)
+                    #if id == 1:
+                    #    print("wrong 0", all_blobs[:,threeblob[0]],all_blobs[:,threeblob[1]],all_blobs[:,threeblob[2]] )
+                elif orig_ind[1]-orig_ind[0] != 1:
+                    self.parsing_vector.append(-1)
+                    #if id == 1:
+                    #    print("wrong 1", all_blobs[:,threeblob[0]],all_blobs[:,threeblob[1]],all_blobs[:,threeblob[2]] , "correct",  all_blobs[:,threeblob[0]],    all_blobs[:,np.where(p==orig_ind[0]+1)[0][0]],    all_blobs[:,np.where(p==orig_ind[0]+2)[0][0]])
+                elif orig_ind[2]-orig_ind[1] != 1:
+                    self.parsing_vector.append(-1)
+                    #if id == 1:
+                    #    print("wrong 2", all_blobs[:,threeblob[0]],all_blobs[:,threeblob[1]],all_blobs[:,threeblob[2]] , "correct",  all_blobs[:,threeblob[0]],   all_blobs[:,np.where(p==orig_ind[0]+1)[0][0]],     all_blobs[:,np.where(p==orig_ind[0]+2)[0][0]])
+                    third_led_wrong += 1
+                else:
+                    self.parsing_vector.append(1)
 
-        # print("wrong_parsing", wrong_parsing, "correct_parsing", correct_parsing)
-        self.parsing_wrong = wrong_parsing / no_visible_fish
-        self.parsing_correct =  correct_parsing / no_visible_fish
+            wrong_parsing = sum(np.equal(self.parsing_vector, -1))
+            correct_parsing = len(b3_matched_ind) - wrong_parsing
+            # calc percentage and save in self
+            # if wrong_parsing:
+            #     print("wrong 3rd led parsing", third_led_wrong/wrong_parsing, "% of all wrong")
 
-        self.parsing_wrong_third_led = third_led_wrong / no_visible_fish
-        #print("led1 reflection", led1_wrong)
-        #print(self.parsing_vector)
+            # print("wrong_parsing", wrong_parsing, "correct_parsing", correct_parsing)
+            self.parsing_wrong = wrong_parsing / no_visible_fish
+            self.parsing_correct =  correct_parsing / no_visible_fish
 
-        #for debugging to see if things go wrong when looking for triplet or already for duplet:
-        wrong_parsing = 0
-        for twoblob in twoblob_ind:
-           orig_ind = [p[twoblob[0]], p[twoblob[1]]]
-           orig_ind.sort()
-           if orig_ind[0]%3 != 0 or orig_ind[1] >= 3*no_visible_fish:
-               wrong_parsing += 1
-           elif orig_ind[1]-orig_ind[0] != 1:
-               wrong_parsing += 1
+            self.parsing_wrong_third_led = third_led_wrong / no_visible_fish
+            #print("led1 reflection", led1_wrong)
+            #print(self.parsing_vector)
 
-        correct_parsing = len(twoblob_ind) - wrong_parsing
-        #print("wrong_parsing twoblobs {:0.1f}, threeblobs {:0.1f}".format(wrong_parsing/no_visible_fish,self.parsing_wrong))
-        #print("correct_parsing twoblobs {:0.1f}, wrong_parsing {:0.1f}".format(correct_parsing/no_visible_fish,wrong_parsing/no_visible_fish))
+            #for debugging to see if things go wrong when looking for triplet or already for duplet:
+            wrong_parsing = 0
+            if duplet_matched_ind:
+                twoblob_ind = np.array(duplet_candidates_ind)[duplet_matched_ind]
+                for twoblob in twoblob_ind:
+                   orig_ind = [p[twoblob[0]], p[twoblob[1]]]
+                   orig_ind.sort()
+                   if orig_ind[0]%3 != 0 or orig_ind[1] >= 3*no_visible_fish:
+                       wrong_parsing += 1
+                   elif orig_ind[1]-orig_ind[0] != 1:
+                       wrong_parsing += 1
+
+                correct_parsing = len(twoblob_ind) - wrong_parsing
+            #print("wrong_parsing twoblobs {:0.1f}, threeblobs {:0.1f}".format(wrong_parsing/no_visible_fish,self.parsing_wrong))
+            #print("correct_parsing twoblobs {:0.1f}, wrong_parsing {:0.1f}".format(correct_parsing/no_visible_fish,wrong_parsing/no_visible_fish))
+
+    def count_wrong_refl_removal(self, blob_ind_list):
+        p = self.leds_random_permutation
+        no_visible_fish = len(p)//(3*(1+self.surface_reflections))
+        wrong_refl_removal = 0
+        for blob_ind in blob_ind_list:
+            orig_ind = p[blob_ind]
+            if orig_ind < 3*no_visible_fish:
+                wrong_refl_removal += 1
+
+        return wrong_refl_removal/len(blob_ind_list)

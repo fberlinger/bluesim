@@ -48,7 +48,7 @@ arena = meta['Arena [mm]']
 timesteps = data.shape[0]
 fishes = meta['Number of fishes']
 pred_bool = meta['pred_bool']
-
+data_kf = np.empty((0))
 # Format Data
 # x = data[:, :1]
 # y = data[:, 1:2]
@@ -68,7 +68,11 @@ if plot_kf:
     ax2.set_ylim([-180, 180])
 
     #add kalman filtered data if available (relative position)
-    data_kf = np.genfromtxt('./logfiles/kf_{}.csv'.format(protagonist_id), delimiter=',')
+    try:
+        data_kf = np.genfromtxt('./logfiles/kf_{}.csv'.format(protagonist_id), delimiter=',')
+    except: # no kf data available
+        pass
+
     if data_kf.ndim == 2:
         data_kf = data_kf[1:,:] #cut title row
         data_kf_sort = data_kf[np.argsort(data_kf[:, 0])]
@@ -83,8 +87,8 @@ if plot_kf:
             else:
                 ax1.plot(data_kf_track[:,2], data_kf_track[:,3], marker = '*', markersize=12, label='kf_{}'.format(ii), color = colors[idx,:])
                 ax2.plot(data_kf_track[:,1]/clock_freq, np.arctan2(np.sin(data_kf_track[:,5]), np.cos(data_kf_track[:,5])) * 180/np.pi, marker = '*', markersize=12, label='kf_{}'.format(ii), color = colors[idx,:])
-        
-        ax2.scatter(data_kf[np.argwhere(data_kf[:, 8].astype(int)!=1),1]/clock_freq, data_kf[np.argwhere(data_kf[:, 8].astype(int)!=1), 5]* 180/np.pi, marker = '*', s=500, color = 'k')
+
+        #ax2.scatter(data_kf[np.argwhere(data_kf[:, 8].astype(int)!=1),1]/clock_freq, data_kf[np.argwhere(data_kf[:, 8].astype(int)!=1), 5]* 180/np.pi, marker = '*', s=500, color = 'k')
         ax1.legend()
         ax2.legend()
 
@@ -116,9 +120,9 @@ if plot_kf:
         ax1.plot(rel_x, rel_y, marker = 'o', label='groundtruth pred', color = colors[fishes,:])
         ax2.plot(np.array(range(pred_start, pred_end))/clock_freq, rel_phi * 180/np.pi, marker = 'o', label='groundtruth pred', color = colors[fishes,:])
 
-    
+
     ax1.legend()
-    ax2.legend()   
+    ax2.legend()
 
     fig.suptitle('Kf tracking of fish {}'.format(protagonist_id))
     plt.gcf().canvas.get_tk_widget().focus_force()  #apparently necessary for mac to open new figure in front of everything
@@ -153,5 +157,5 @@ if plot_phi:
     fig.suptitle('Phi over time')
     plt.show()
 
-    print('The initial std phi is {0:.1f}rad.'.format(phi_std[0]))
-    print('The final std phi is {0:.1f}rad.'.format(phi_std[-1]))
+    print('The initial std phi is {0:.1f}.'.format(phi_std[0]))
+    print('The final std phi is {0:.1f}.'.format(phi_std[-1]))
