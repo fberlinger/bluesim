@@ -443,8 +443,8 @@ class Fish():
         if not duplet_candidates:
             return ([], [], [], [], [])
         #match
-        duplet_matched_ind, track_matched_duplet_ind, duplet_new_ind, unassigned_ind = self.match_duplet_tracks(duplet_candidates, duplet_candidates_ind, unassigned_ind, predicted_blobs, predicted_phi)
-        triplet_matched, phi_matched, triplet_matched_ind, track_matched_ind, duplet_new_ind, b3_matched_ind, unassigned_ind = self.find_triplet_matched(detected_blobs, duplet_candidates, duplet_candidates_ind, duplet_matched_ind, track_matched_duplet_ind, unassigned_ind, predicted_blobs) #triplet_matched is xyz of led1 and phi
+        duplet_matched_ind, track_matched_duplet_ind, duplet_new_ind, unassigned_ind = self.match_duplet_tracks(duplet_candidates, duplet_candidates_ind, unassigned_ind, predicted_blobs)
+        triplet_matched, phi_matched, triplet_matched_ind, track_matched_ind, duplet_new_ind, b3_matched_ind, unassigned_ind = self.find_triplet_matched(detected_blobs, duplet_candidates, duplet_candidates_ind, duplet_matched_ind, track_matched_duplet_ind, unassigned_ind, predicted_blobs, predicted_phi) #triplet_matched is xyz of led1 and phi
         #new track
         triplet_new, phi_new = self.find_triplet_new(detected_blobs, duplet_candidates, duplet_candidates_ind, duplet_new_ind, unassigned_ind)
         #this function evaluates the percentage of correctly matched leds
@@ -499,7 +499,7 @@ class Fish():
 
         return duplet_candidates, duplet_candidates_ind, unassigned_ind
 
-    def match_duplet_tracks(self, duplet_candidates, duplet_candidates_ind, unassigned_ind, predicted_blobs, predicted_phi):
+    def match_duplet_tracks(self, duplet_candidates, duplet_candidates_ind, unassigned_ind, predicted_blobs):
 
         duplet_matched_ind = []
         track_matched_duplet_ind = []
@@ -515,49 +515,34 @@ class Fish():
 
         led1_dist = cdist(led1_candidate, led1_predicted, 'euclidean')
         led2_dist = cdist(led2_candidate, led2_predicted, 'euclidean')
-        #greedy starts here
         D = (led1_dist + led2_dist)/2
-        dist_thresh = 400 #mm, pw tune
+        # dist_thresh =  200 + 100*np.matlib.repmat(self.first_detection, np.shape(D)[0], 1) #300 #mm, pw tune
+        dist_thresh = 300 #mm, pw tune
+        #"""#greedy matching (pw: is better than munkres!)
         while np.min(D) < dist_thresh:
             ind = np.unravel_index(np.argmin(D, axis=None), D.shape)
-            D[ind[0],:] = dist_thresh
-            D[:,ind[1]] = dist_thresh
+            D[ind[0],:] = dist_thresh + 1
+            D[:,ind[1]] = dist_thresh + 1
             duplet_matched_ind.append(ind[0])
             track_matched_duplet_ind.append(ind[1])
             unassigned_ind.difference_update(duplet_candidates_ind[ind[0]]) #those blobs are assigned now
 
-        """Munkres
-        dist_thresh = 400 + 200*np.matlib.repmat(first_detection, np.shape(led1_dist)[0], 1) ##800 + 400*np.matlib.repmat(first_detection, np.shape(led1_dist)[0], 1) #[mm] larger thresh if first detection
+        """#Munkres
+        #dist_thresh = 400 + 200*np.matlib.repmat(first_detection, np.shape(led1_dist)[0], 1) #[mm] larger thresh if first detection
+        duplet_matched_ind_long, track_matched_duplet_ind_long = linear_sum_assignment(D)
 
-        led1_dist = np.clip(led1_dist, 0, dist_thresh) #clip to threshold
-        led2_dist = np.clip(led2_dist, 0, dist_thresh) #clip to threshold
+        #sort out matches with too high cost
+        for i, j in zip(list(duplet_matched_ind_long), list(track_matched_duplet_ind_long)):
+            if D[i,j] < dist_thresh: #cost_thresh for munkres
+                duplet_matched_ind.append(i)
+                track_matched_duplet_ind.append(j)
+                unassigned_ind.difference_update(duplet_candidates_ind[i]) #the blobs from those indices are assigned now -> remove them from unassigned_ind
 
-        #add up normalized costs of both
-        dist_normalized = (led1_dist + led2_dist)/(2*dist_thresh)
-        #print("dist_normalized",dist_normalized)
-        xyz_twoblob_matched_ind_long, track_twoblob_matched_ind_long = linear_sum_assignment(dist_normalized)
-        xyz_twoblob_matched_ind_long = list(xyz_twoblob_matched_ind_long)
-        track_twoblob_matched_ind_long = list(track_twoblob_matched_ind_long)
-        cost_thresh = 0.45 #pw tune, needs to be smaller than 0.5 to ensure no led is saturated in thresh, before 0.5 of 300mm
-        xyz_twoblob_matched_ind = xyz_twoblob_matched_ind_long.copy()
-        track_twoblob_matched_ind = track_twoblob_matched_ind_long.copy()
-
-        #ignore matches with too high cost
-        #print("cost",dist_normalized[xyz_twoblob_matched_ind, track_twoblob_matched_ind])
-
-        for i, j in zip(xyz_twoblob_matched_ind_long, track_twoblob_matched_ind_long):
-            if dist_normalized[i,j] < cost_thresh: #cost_thresh for munkres
-                unassigned_ind.difference_update(twoblob_candidate_ind[i]) #the blobs from those indices are assigned now -> remove them from unassigned_ind
-            else:
-                xyz_twoblob_matched_ind.remove(i)
-                track_twoblob_matched_ind.remove(j)
-        #print(no_duplets, len(xyz_twoblob_matched_ind),len(unassigned_ind))
-        """
+        #"""
         #print(duplet_matched_ind, track_matched_duplet_ind, duplet_new_ind, unassigned_ind)
         return duplet_matched_ind, track_matched_duplet_ind, duplet_new_ind, unassigned_ind
 
-    def find_triplet_matched(self, detected_blobs, duplet_candidates, duplet_candidates_ind, duplet_matched_ind, track_matched_duplet_ind, unassigned_ind, predicted_blobs):
-
+    def find_triplet_matched(self, detected_blobs, duplet_candidates, duplet_candidates_ind, duplet_matched_ind, track_matched_duplet_ind, unassigned_ind, predicted_blobs, predicted_phi):
         triplet_matched = []
         triplet_matched_ind = []
         track_matched_ind = []
@@ -567,30 +552,47 @@ class Fish():
         if not (duplet_matched_ind and unassigned_ind and predicted_blobs):
             return triplet_matched, phi_matched, triplet_matched_ind, track_matched_ind, duplet_new_ind, b3_matched_ind, unassigned_ind
 
-        dist_thresh = 50 #mm, pw tune, euclidean dist from predicted led3 to measured blob
         unassigned_ind_list = list(unassigned_ind)
         N0 = len(duplet_matched_ind)
         N1 = len(unassigned_ind_list)
-        cost_mat = np.empty((N0, N1))
+        D = np.empty((N0, N1))
+        phi_thresh = pi/3 #rad
+        xyz_thresh = 10#20 #mm
         #fill in cost matrix
+        # for idx_i, i in enumerate(duplet_matched_ind):
+        #     duplet = duplet_candidates[i]
+        #     b3_predicted = predicted_blobs[track_matched_duplet_ind[idx_i]][:,2]
+        #     for idx_j, j in enumerate(unassigned_ind_list): #take all unassigned_ind indices
+        #         b3_pqr = detected_blobs[:,j]
+        #         triplet = self._pqr_3_to_xyz(duplet, b3_pqr)
+        #         b3 = triplet[:,2]
+        #         dist = np.linalg.norm(b3 - b3_predicted)
+        #         D[idx_i, idx_j] = dist
+        #         #print(j, "predb3 to xyz_b3 norm", np.linalg.norm(xyz_b3_predicted - xyz_b3), "vert", led_vert_dist/U_LED_DZ, "hor", (np.abs(led_hor_dist-U_LED_DX)/U_LED_DX))
+        # dist_thresh = 60 #mm, pw tune, euclidean dist from predicted led3 to measured blob
         for idx_i, i in enumerate(duplet_matched_ind):
             duplet = duplet_candidates[i]
             b3_predicted = predicted_blobs[track_matched_duplet_ind[idx_i]][:,2]
+            phi_predicted = predicted_phi[track_matched_duplet_ind[idx_i]]
             for idx_j, j in enumerate(unassigned_ind_list): #take all unassigned_ind indices
                 b3_pqr = detected_blobs[:,j]
                 triplet = self._pqr_3_to_xyz(duplet, b3_pqr)
                 b3 = triplet[:,2]
-                dist = np.linalg.norm(b3 - b3_predicted)
-                cost_mat[idx_i, idx_j] = dist
-                #print(j, "predb3 to xyz_b3 norm", np.linalg.norm(xyz_b3_predicted - xyz_b3), "vert", led_vert_dist/U_LED_DZ, "hor", (np.abs(led_hor_dist-U_LED_DX)/U_LED_DX))
-
-        #greedy matching
-        D = cost_mat
+                phi = self._orientation(triplet)
+                hor_dist = abs(sqrt((b3[0]-duplet[0,0])**2 + (b3[1]-duplet[1,0])**2) - U_LED_DX) #radial deviation from circle
+                vert_dist = abs(b3[2]-duplet[2,0]) #vertical deviation from circle
+                phi_dist = abs(np.arctan2(sin(phi-phi_predicted), cos(phi-phi_predicted)))
+                circle_dist = sqrt(hor_dist**2 + vert_dist**2)
+                dist = (phi_dist/phi_thresh + circle_dist/xyz_thresh)/2
+                D[idx_i, idx_j] = dist
+                #print("hor_dist",hor_dist, "vert_dist", vert_dist,"phi_dist",phi_dist )
+        dist_thresh = 1 # normalized cost
+        #"""#greedy matching (pw: is better than munkres!)
         try:
             while np.min(D) < dist_thresh:
                 ind = np.unravel_index(np.argmin(D, axis=None), D.shape)
-                D[ind[0],:] = dist_thresh
-                D[:,ind[1]] = dist_thresh
+                D[ind[0],:] = dist_thresh + 1
+                D[:,ind[1]] = dist_thresh + 1
                 i = duplet_matched_ind[ind[0]]
                 j = unassigned_ind_list[ind[1]]
                 #calc triplet
@@ -605,7 +607,7 @@ class Fish():
                 phi_matched.append(phi)
                 b3_matched_ind.append([duplet_candidates_ind[i][0],duplet_candidates_ind[i][1],j])
                 unassigned_ind.discard(j)
-                j_neighbor_ind = np.argwhere([j in x for x in duplet_candidates_ind]) #pw make nicer?
+                j_neighbor_ind = np.argwhere([j in x for x in duplet_candidates_ind])
                 if np.size(j_neighbor_ind): #blob j has been assigned now, but it also belongs to another twoblob pair
                     unassigned_ind.difference_update(duplet_candidates_ind[j_neighbor_ind[0,0]]) # remove the blob that has been paired with j, cause it's probably its reflection
                     duplet_new_ind.discard(j_neighbor_ind[0,0])
@@ -614,46 +616,48 @@ class Fish():
         except:
             print("invalid cost mat",D)
 
-        """Munkres
+        """#Munkres
 
-            duplet_matched_idx, thirdblob_matched_idx = linear_sum_assignment(cost_mat)
+        duplet_matched_idx, thirdblob_matched_idx = linear_sum_assignment(D)
 
         #check if cost of matched 3rd led is smaller than thresh
         for idx_i, idx_j in zip(duplet_matched_idx, thirdblob_matched_idx):
-            if cost_mat[idx_i, idx_j] < cost_thresh:
-                i = xyz_twoblob_matched_ind[idx_i]
+            if D[idx_i, idx_j] < dist_thresh:
+                i = duplet_matched_ind[idx_i]
                 j = unassigned_ind_list[idx_j]
-                xyz_twoblob = xyz_twoblob_candidate[i]
-                pqr_b3 = all_blobs[:,j]
-                xyz_threeblob = self._pqr_3_to_xyz(xyz_twoblob, pqr_b3)
-                phi = self._orientation(xyz_threeblob)
+                duplet = duplet_candidates[i]
+                b3_pqr = detected_blobs[:,j]
+                triplet = self._pqr_3_to_xyz(duplet, b3_pqr)
+                phi = self._orientation(triplet)
                 #append matched triplet
-                xyz_threeblob_matched.append(xyz_threeblob)
-                blob3_matched_ind.append([twoblob_candidate_ind[i][0],twoblob_candidate_ind[i][1],j])
-                xyz_threeblob_matched_ind.append(i)
-                track_threeblob_matched_ind.append(track_twoblob_matched_ind[idx_i])
+                triplet_matched.append(triplet)
+                b3_matched_ind.append([duplet_candidates_ind[i][0], duplet_candidates_ind[i][1], j])
+                triplet_matched_ind.append(i)
+                track_matched_ind.append(track_matched_duplet_ind[idx_i])
                 phi_matched.append(phi)
                 unassigned_ind.discard(j)
-                j_neighbor_ind = np.argwhere([j in x for x in twoblob_candidate_ind])
+                j_neighbor_ind = np.argwhere([j in x for x in duplet_candidates_ind])
                 if np.size(j_neighbor_ind): #blob j has been assigned now, but it also belongs to another twoblob pair
-                    unassigned_ind.difference_update(twoblob_candidate_ind[j_neighbor_ind[0,0]]) # remove the blob that has been paired with j, cause it's probably its reflection
-                    twoblob_new_ind.discard(j_neighbor_ind[0,0])"""
+                    unassigned_ind.difference_update(duplet_candidates_ind[j_neighbor_ind[0,0]]) # remove the blob that has been paired with j, cause it's probably its reflection
+                    duplet_new_ind.discard(j_neighbor_ind[0,0])
+        #"""
 
         return triplet_matched, phi_matched, triplet_matched_ind, track_matched_ind, duplet_new_ind, b3_matched_ind, unassigned_ind
 
     def find_triplet_new(self, detected_blobs, duplet_candidates, duplet_candidates_ind, duplet_new_ind, unassigned_ind):
         triplet_new = []
         phi_new = []
-
         duplet_new_ind_list = list(duplet_new_ind)
         unassigned_ind_list = list(unassigned_ind)
 
-        dist_thresh = 50 #mm, dist thresh of matched led3 to circle
+        dist_thresh = 10 #mm, pw tune, dist thresh of matched led3 to circle
         for i in duplet_new_ind_list:
+            if i not in duplet_new_ind:
+                continue
             duplet = duplet_candidates[i]
             #find 3rd fitting led
             for j in unassigned_ind_list:
-                if j in duplet_candidates_ind[i]: #this j is already used to form the duplet
+                if j not in unassigned_ind or j in duplet_candidates_ind[i]: #this j is already used to form the duplet
                     continue
                 b3_pqr = detected_blobs[:,j]
                 triplet = self._pqr_3_to_xyz(duplet, b3_pqr)
@@ -665,12 +669,12 @@ class Fish():
                     phi = self._orientation(triplet)
                     triplet_new.append(triplet)
                     phi_new.append(phi)
-                    unassigned_ind_list.remove(j) #make this nicer pw!!!!
-                    unassigned_ind_list = [x for x in unassigned_ind_list if x not in duplet_candidates_ind[i]]
+                    unassigned_ind.discard(j)
+                    unassigned_ind.difference_update(duplet_candidates_ind[i])
                     j_neighbor_ind = np.argwhere([j in x for x in duplet_candidates_ind])
                     if np.size(j_neighbor_ind): #blob j has been assigned now, but it also belongs to another twoblob pair --> remove that one and the vertical blobs from the unassigned list
-                        unassigned_ind_list = [x for x in unassigned_ind_list if x not in duplet_candidates_ind[j_neighbor_ind[0,0]]]
-                        duplet_new_ind_list = [x for x in duplet_new_ind_list if x != j_neighbor_ind[0,0]]
+                        unassigned_ind.difference_update(duplet_candidates_ind[j_neighbor_ind[0,0]])
+                        duplet_new_ind.discard(j_neighbor_ind[0,0])
 
                     break
 

@@ -127,10 +127,13 @@ phi_mean = np.arctan2(phi_mean_sin, phi_mean_cos)
 phi_std = np.sqrt(-np.log(phi_mean_sin**2 + phi_mean_cos**2))
 
 #define std errorband! define no samples to take average over
-#errorband = 0.3
-#samples_std_end = 10
-#t_settling_idx = next(x for x, val in enumerate(phi_std[::-1]) if val > errorband)
-#t_settling = simulation_time * (1 - t_settling_idx/timesteps)
+errorband = 0.5
+samples_std_end = 20
+t_settling_idx = next(x for x, val in enumerate(phi_std[::-1]) if val > errorband)
+t_settling = simulation_time * (1 - t_settling_idx/timesteps)
+phi_std_end = np.mean(phi_std[-samples_std_end:-1])
+
+"""
 conv_window = 15
 conv_thresh = 0.003
 rate = []
@@ -146,9 +149,9 @@ for i in range(timesteps):
         if rate[-1] < conv_thresh and rate[-1] > -conv_thresh: #should be sinking, but slowly
             t_settling = (i-conv_window)/2 #cause clock_freq = 2, define settling time at the beginning of settled window
             break
-
-
 phi_std_end = np.mean(phi_std[-(1+conv_window):-1])
+"""
+
 
 print('The setting time is {0:.1f} s.'.format(t_settling))
 print('The initial std phi is {0:4.3f}.'.format(phi_std[0]))

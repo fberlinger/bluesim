@@ -68,7 +68,7 @@ for kf_file in glob.glob("./logfiles/kf*"):
     os.remove(kf_file)
 
 # Experimental Parameters
-no_fish = 5
+no_fish = 8
 simulation_time = 60 # [s]
 clock_freq = 2 # [Hz]
 clock_rate = 1/clock_freq
@@ -77,7 +77,7 @@ clock_rate = 1/clock_freq
 v_range=3000 # visual range, [mm]
 w_blindspot=50 # width of blindspot, [mm]
 r_sphere=50 # radius of blocking sphere for occlusion, [mm]
-n_magnitude=0.0 # visual noise magnitude, [0.05 means 5% of distance]
+n_magnitude=0.05 # visual noise magnitude, [0.05 means 5% of distance]
 surface_reflections=True#True
 parsing_bool = True
 
@@ -105,7 +105,7 @@ initial_spread = 500 #remove *10
 pos = np.zeros((no_fish, 4))
 vel = np.zeros((no_fish, 4))
 pos[:,:2] = initial_spread * (np.random.rand(no_fish, 2) - 0.5) + arena_center[:2] # x,y
-pos[:,2] = 200 * np.random.rand(1, no_fish) #500 + np.array(range(no_fish))*100 # z, all fish a same noise-free depth results in LJ lock
+pos[:,2] = 200 * np.random.rand(1, no_fish) + 100 #500 + np.array(range(no_fish))*100 # z, all fish a same noise-free depth results in LJ lock
 pos[:,3] = 2*math.pi * (np.random.rand(1, no_fish) - 0.5)# phi # np.zeros((1, no_fish)) #pw 2*!!!! put back
 
 # Create Environment, Dynamics, And Heap

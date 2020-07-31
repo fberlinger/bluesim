@@ -94,13 +94,13 @@ fish_specs = (v_range, w_blindspot, r_sphere, n_magnitude, surface_reflections, 
 
 # Standard Tank
 arena_list = [1780, 1780, 1170]
-arena_list = [2*x for x in arena_list] #pw for fountain more space for now
+#arena_list = [2*x for x in arena_list] #pw for fountain more space for now
 arena = np.array(arena_list)
 arena_center = arena / 2.0
 initial_spread = 500
 
 # Experimental Parameters
-loopname = 'aligning_v1'
+loopname = 'munkres_vs_greedy'
 no_repetitions = 5
 no_fish_range = [8]#[10,20]
 
@@ -120,7 +120,7 @@ for no_fish in sorted(list(no_fish_range) * no_repetitions):
     np.random.seed(seed_array[0, i])
     pos[:,:2] = initial_spread * (np.random.rand(no_fish, 2) - 0.5) + arena_center[:2] # x,y
     np.random.seed(seed_array[1, i])
-    pos[:,2] = initial_spread * np.random.rand(1, no_fish) # z, all fish a same noise-free depth results in LJ lock
+    pos[:,2] = initial_spread * np.random.rand(1, no_fish) + 100# z, all fish a same noise-free depth results in LJ lock
     np.random.seed(seed_array[2, i])
     pos[:,3] = 2*math.pi * (np.random.rand(1, no_fish) - 0.5)# phi
     i+=1
