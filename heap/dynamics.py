@@ -115,3 +115,4 @@ class Dynamics():
         vel = np.concatenate((m_to_mm * g_Pdot_r, np.array([vphi])), axis=0)
 
         return (pos, vel)
+        
