@@ -68,7 +68,7 @@ for kf_file in glob.glob("./logfiles/kf*"):
     os.remove(kf_file)
 
 simulation_time = 60 # [s]
-clock_freq = 2 # [Hz]
+clock_freq = 0.75 # [Hz]
 clock_rate = 1/clock_freq
 
 # Fish Specifications
@@ -100,7 +100,7 @@ arena_center = arena / 2.0
 initial_spread = 500
 
 # Experimental Parameters
-loopname = 'munkres_vs_greedy'
+loopname = 'aligning_clockfreq'
 no_repetitions = 5
 no_fish_range = [8]#[10,20]
 
@@ -113,7 +113,7 @@ seed_array = np.array([[ 2, 25, 15, 25, 12, 68, 26, 99, 97, 81, 24, 79, 18, 26, 
 i = 0
 
 for no_fish in sorted(list(no_fish_range) * no_repetitions):
-    
+
     # Standard Surface Initialization
     pos = np.zeros((no_fish, 4))
     vel = np.zeros((no_fish, 4))

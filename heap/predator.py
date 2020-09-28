@@ -47,7 +47,7 @@ class Predator():
         return fish_center
 
     def start_pred(self, pred_phi, fish_center):
-        fish_point1 = fish_center - np.array([cos(pred_phi), sin(pred_phi), 0])*10000 #approach from behind, just choose big enough factor to get out of tank for sure
+        fish_point1 = fish_center - np.array([cos(pred_phi), sin(pred_phi), 0])*10*self.environment.arena_size[0] #approach from behind, just choose big enough factor to get out of tank for sure
         fish_path = LineString([tuple(fish_center[0:2]), tuple(fish_point1[0:2])])
         tank = LinearRing([(0, 0), (self.environment.arena_size[0], 0), (self.environment.arena_size[0], self.environment.arena_size[1]), (0, self.environment.arena_size[1])])
 

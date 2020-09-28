@@ -10,7 +10,7 @@ class Dynamics():
     def __init__(self, environment):
         self.environment = environment
         self.steps = 10
-        
+
         # Robot Specs
         self.rho = 998 # [kg/m^3], water density
         self.l_robot = 0.150 # [m], including fin
@@ -38,7 +38,12 @@ class Dynamics():
         self.F_PL = 0 # [N]
         self.F_dors = 0 # [N]
 
-    def update_ctrl(self, dorsal, caudal, pect_r, pect_l):
+        self.caudal_prev = np.zeros(self.environment.no_robots)
+        self.pect_r_prev = np.zeros(self.environment.no_robots)
+        self.pect_l_prev = np.zeros(self.environment.no_robots)
+        self.dorsal_prev = np.zeros(self.environment.no_robots)
+
+    def update_ctrl(self, dorsal, caudal, pect_r, pect_l, source_id):
         """Update BlueBots fin control. Those thrust forces are then used in the equations of motion.
 
         Args:
@@ -52,10 +57,17 @@ class Dynamics():
         F_PL_max = 0.006 # [N]
         F_dors_max = 0.020 # [N]
 
-        self.F_caud = caudal * F_caud_max
-        self.F_PR = pect_r * F_PR_max
-        self.F_PL = pect_l * F_PL_max
-        self.F_dors = dorsal * F_dors_max
+        #introduce a delay of one iteration for a more realistic simulation of processing time
+        self.F_caud = self.caudal_prev[source_id] * F_caud_max
+        self.F_PR = self.pect_r_prev[source_id] * F_PR_max
+        self.F_PL = self.pect_l_prev[source_id] * F_PL_max
+        self.F_dors = self.dorsal_prev[source_id] * F_dors_max
+
+        self.caudal_prev[source_id] = caudal
+        self.pect_r_prev[source_id] = pect_r
+        self.pect_l_prev[source_id] = pect_l
+        self.dorsal_prev[source_id] = dorsal
+
 
     def simulate_move(self, source_id, duration):
         """Simulates move starting from current global coordinates based on current velocities and fin control. Returns next global coordinates.

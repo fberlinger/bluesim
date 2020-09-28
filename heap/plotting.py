@@ -23,7 +23,7 @@ import matplotlib.pyplot as plt
 from matplotlib import cm
 
 
-plot_kf = True
+plot_kf = False
 plot_phi = True
 
 # Load Data
@@ -125,7 +125,7 @@ if plot_kf:
     ax2.legend()
 
     fig.suptitle('Kf tracking of fish {}'.format(protagonist_id))
-    plt.gcf().canvas.get_tk_widget().focus_force()  #apparently necessary for mac to open new figure in front of everything
+    #plt.gcf().canvas.get_tk_widget().focus_force()  #apparently necessary for mac to open new figure in front of everything
     plt.show()
     #plt.get_current_fig_manager().show() #new figure in front of other figures, but behind spyder
 

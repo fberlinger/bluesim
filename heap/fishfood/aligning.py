@@ -415,7 +415,7 @@ class Fish():
             angles = np.append(angles, angle)
 
         return angles #angles in rad!
-    #""" new clean version
+
     def remove_reflections(self, unassigned_ind, my_z, duplet, inthresh_pitch_sorted, inthresh_ind_sorted):
         pitch_thresh =  1 / 180*np.pi #pw tune, before 1deg
         z_ref_pred1 = - (2*my_z + duplet[2,0]) #predicted z coordinate of reflection
@@ -487,7 +487,7 @@ class Fish():
 
             if my_z + duplet[2,0] < 0 or np.linalg.norm(duplet[:,0]) > 4000 or np.linalg.norm(duplet[:,0]) < 50: #LED 1 is above water surface or fish too close or too far away --> impossible, continue
                 i += 1
-                print("impossible duplet")
+                #print("impossible duplet")
                 continue
 
             duplet_candidates.append(duplet)
@@ -495,7 +495,7 @@ class Fish():
             no_duplets += 1
             i += inthresh_len
 
-        unassigned_ind = self.remove_reflections(unassigned_ind, my_z, duplet, inthresh_pitch_sorted, inthresh_ind_sorted)
+            unassigned_ind = self.remove_reflections(unassigned_ind, my_z, duplet, inthresh_pitch_sorted, inthresh_ind_sorted)
 
         return duplet_candidates, duplet_candidates_ind, unassigned_ind
 
@@ -712,6 +712,23 @@ class Fish():
         #     self.caudal = 0.7
         # else:
             # self.caudal = 0
+    def track_neighbors(self, detected_blobs):
+        if self.wo_kf:
+            predicted_blobs = []
+            predicted_phi = []
+        else:
+            predicted_blobs, predicted_phi = self.kalman_prediction_update()
+        # match blob triplets, give their orientation
+        (xyz_matched, phi_matched, xyz_new, phi_new, matched_track_ind) = self.parsing(detected_blobs, predicted_blobs, predicted_phi)
+
+        self.kalman_measurement_update(xyz_matched, phi_matched, matched_track_ind) #predicted_ind has same length as xyz_matched and says to which track this measurement was matched
+
+        self.kalman_remove_lost_tracks(matched_track_ind)
+
+        (rel_pos_led1, rel_phi) = self.kalman_new_tracks(xyz_new, phi_new)
+
+        return rel_pos_led1, rel_phi
+
     def home_aggregate_align(self, center_pos, center_orient):
         aggregatation_thresh = 500 #below this dont worry about aggregating
         aggregatation_max = 2000 #aggregate at full weight when at this distance
@@ -780,24 +797,13 @@ class Fish():
                 self.caudal = np.clip(sin(self.dynamics.pect_angle)*(self.pect_r + self.pect_l)*F_P_max/F_caud_max, 0, 1)
             #print(self.id, self.pect_l, self.pect_r)
 
+
     def move(self, detected_blobs, duration):
         """Decision-making based on neighboring robots and corresponding move
         """
         self.it_counter += 1
 
-        if self.wo_kf:
-            predicted_blobs = []
-            predicted_phi = []
-        else:
-            predicted_blobs, predicted_phi = self.kalman_prediction_update()
-        # match blob triplets, give their orientation
-        (xyz_matched, phi_matched, xyz_new, phi_new, matched_track_ind) = self.parsing(detected_blobs, predicted_blobs, predicted_phi)
-
-        self.kalman_measurement_update(xyz_matched, phi_matched, matched_track_ind) #predicted_ind has same length as xyz_matched and says to which track this measurement was matched
-
-        self.kalman_remove_lost_tracks(matched_track_ind)
-
-        (rel_pos_led1, rel_phi) = self.kalman_new_tracks(xyz_new, phi_new)
+        (rel_pos_led1, rel_phi) = self.track_neighbors(detected_blobs)
 
         # find target orientation
         center_orient = self.comp_center_orient(rel_phi)
@@ -832,7 +838,7 @@ class Fish():
         self.pect_r = 0
         self.pect_l = 0
         """
-        self.dynamics.update_ctrl(self.dorsal, self.caudal, self.pect_r, self.pect_l)
+        self.dynamics.update_ctrl(self.dorsal, self.caudal, self.pect_r, self.pect_l, self.id)
         target_pos, self_vel = self.dynamics.simulate_move(self.id, duration)
 
         return (target_pos, self_vel)
@@ -857,7 +863,7 @@ class Fish():
 
         z_des = 500 + self.id *100 #so that they are in different heights #300 + self.id *30
         self.depth_ctrl_vert(z_des-self.environment.pos[self.id][2])
-        self.dynamics.update_ctrl(self.dorsal, self.caudal, self.pect_r, self.pect_l)
+        self.dynamics.update_ctrl(self.dorsal, self.caudal, self.pect_r, self.pect_l, self.id)
         target_pos, self_vel = self.dynamics.simulate_move(self.id, duration)
 
         return (target_pos, self_vel)

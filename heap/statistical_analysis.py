@@ -127,7 +127,7 @@ phi_mean = np.arctan2(phi_mean_sin, phi_mean_cos)
 phi_std = np.sqrt(-np.log(phi_mean_sin**2 + phi_mean_cos**2))
 
 #define std errorband! define no samples to take average over
-errorband = 0.5
+errorband = 0.4 
 samples_std_end = 20
 t_settling_idx = next(x for x, val in enumerate(phi_std[::-1]) if val > errorband)
 t_settling = simulation_time * (1 - t_settling_idx/timesteps)
