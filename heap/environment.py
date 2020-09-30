@@ -17,7 +17,7 @@ class Environment():
     Fish get their visible neighbors and corresponding relative positions and distances from here. Fish also update their own positions after moving in here. Environmental tracking data is used for simulation analysis.
     """
 
-    def __init__(self, pos, vel, fish_specs, arena, pred_bool, clock_freq):
+    def __init__(self, pos, vel, fish_specs, arena, pred_bool, clock_freq, no_visible_neighbors):
         # Arguments
         self.pos = pos # x, y, z, phi; [no_robots X 4]
         self.vel = vel # pos_dot
@@ -30,6 +30,7 @@ class Environment():
         self.arena_size = arena # x, y, z
         self.pred_bool = pred_bool
         self.clock_freq = clock_freq
+        self.no_visible_neighbors = no_visible_neighbors
 
         if pred_bool:
             self.escape_angle = fish_specs[6] # escape angle for fish, [rad]
@@ -176,9 +177,17 @@ class Environment():
 
         rel_pos = np.reshape(self.rel_pos[source_id], (self.no_robots, self.no_states))
 
-        self.visual_range(source_id, robots)
-        self.blind_spot(source_id, robots, rel_pos)
-        self.occlusions(source_id, robots, rel_pos)
+        if self.no_visible_neighbors: #if this is not zero it means that we want to use this mode of deterministic occlusion
+            no_visible_neighbors = self.no_visible_neighbors
+            if not isinstance(no_visible_neighbors, int): #random rounding
+                no_visible_neighbors = random.sample([math.floor(no_visible_neighbors), math.ceil(no_visible_neighbors)],1)[0]
+            robots_new = random.sample(robots, no_visible_neighbors)
+            robots = set(robots_new)
+
+        else:
+            self.visual_range(source_id, robots)
+            self.blind_spot(source_id, robots, rel_pos)
+            self.occlusions(source_id, robots, rel_pos)
 
         if self.n_magnitude: # no overwrites of self.rel_pos and self.dist
             n_rel_pos, n_dist, n_pos = self.visual_noise(source_id, rel_pos)

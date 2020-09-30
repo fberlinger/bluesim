@@ -31,15 +31,15 @@ def init_log_stat():
     print('creating stat logfile')
     with open('./logfiles/{}_stat.csv'.format(loopname), 'w') as f:
         f.truncate()
-        f.write('experiment, filename, runtime [s], no_fish, n_magnitude, parsing, surface_reflections, escape_angle [rad], pred_speed_ratio, phi_std_init, phi_std_end, t_settling [s], hull_area_max [m^2], pred_eaten, #tracks/timestep avg, #tracks overall avg, kf pos tracking error avg [m], kf phi tracking error avg [rad], parsing_wrong_matches_avg [%], parsing_correct_matches_avg [%]\n')
+        f.write('experiment, filename, runtime [s], no_fish, n_magnitude, parsing, surface_reflections, escape_angle [rad], pred_speed_ratio, phi_std_init, phi_std_end, t_settling [s], hull_area_max [m^2], pred_eaten, #tracks/timestep avg, #tracks overall avg, kf pos tracking error avg [m], kf phi tracking error avg [rad], parsing_wrong_matches_avg [%], parsing_correct_matches_avg [%], no_visible_neighbors\n')
 
 
-def log_stat(experiment_type, loopname, filename, runtime, fishes, noise, parsing, surface_reflections, escape_angle, speed_ratio, phi_std_init, phi_std_end, t_settling, hull_area_max, eaten, no_tracks_avg, no_new_tracks_avg, pos_tracking_error_avg, phi_tracking_error_avg, parsing_wrong_matches_avg, parsing_correct_matches_avg):
+def log_stat(experiment_type, loopname, filename, runtime, fishes, noise, parsing, surface_reflections, escape_angle, speed_ratio, phi_std_init, phi_std_end, t_settling, hull_area_max, eaten, no_tracks_avg, no_new_tracks_avg, pos_tracking_error_avg, phi_tracking_error_avg, parsing_wrong_matches_avg, parsing_correct_matches_avg, no_visible_neighbors):
     """Logs the meta data of the experiment
     """
     with open('./logfiles/{}_stat.csv'.format(loopname), 'a+') as f:
         f.write(
-            '{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}\n'.format(
+            '{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}\n'.format(
                 experiment_type,
                 filename,
                 runtime,
@@ -59,7 +59,8 @@ def log_stat(experiment_type, loopname, filename, runtime, fishes, noise, parsin
                 pos_tracking_error_avg,
                 phi_tracking_error_avg,
                 parsing_wrong_matches_avg,
-                parsing_correct_matches_avg
+                parsing_correct_matches_avg, 
+                no_visible_neighbors
             )
         )
         # for item in phi_std:
@@ -102,6 +103,7 @@ surface_reflections = meta['surface_reflections']
 pred_speed = meta['pred_speed']
 pred_bool = meta['pred_bool']
 experiment_type = meta['Experiment']
+no_visible_neighbors = meta['no_visible_neighbors']
 
 
 if 'loopname' in meta:
@@ -262,6 +264,6 @@ parsing_3rdled_wrong_matches_avg = np.mean(parsing_3rdled_wrong_matches)
 print('In avg {:0.1f}% of all visible triplets are wrongly parsed, {:0.1f}% are correctly parsed; {:0.1f}% are not parsed at all despite being visible.'.format(parsing_wrong_matches_avg*100, parsing_correct_matches_avg*100, (1-parsing_wrong_matches_avg-parsing_correct_matches_avg)*100))
 print(parsing_3rdled_wrong_matches_avg/parsing_wrong_matches_avg * 100, '% of wrong matches are caused by third led')
 
-log_stat(experiment_type, loopname, filename, math.floor(timesteps/clock_freq), fishes, n_magnitude, parsing, surface_reflections, escape_angle, speed_ratio, phi_std[0], phi_std_end, t_settling, hull_area_max/1000**2, eaten, no_tracks_avg, no_new_tracks_avg, pos_tracking_error_avg/1000, phi_tracking_error_avg, parsing_wrong_matches_avg, parsing_correct_matches_avg)
+log_stat(experiment_type, loopname, filename, math.floor(timesteps/clock_freq), fishes, n_magnitude, parsing, surface_reflections, escape_angle, speed_ratio, phi_std[0], phi_std_end, t_settling, hull_area_max/1000**2, eaten, no_tracks_avg, no_new_tracks_avg, pos_tracking_error_avg/1000, phi_tracking_error_avg, parsing_wrong_matches_avg, parsing_correct_matches_avg,no_visible_neighbors)
 if log_phi_std:
     log_phi_std(phi_std, loopname)

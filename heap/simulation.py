@@ -68,7 +68,7 @@ for kf_file in glob.glob("./logfiles/kf*"):
     os.remove(kf_file)
 
 # Experimental Parameters
-no_fish = 10
+no_fish = 50
 simulation_time = 60 # [s]
 clock_freq = 2 # [Hz]
 clock_rate = 1/clock_freq
@@ -80,7 +80,7 @@ r_sphere=50 # radius of blocking sphere for occlusion, [mm]
 n_magnitude=0.05 # visual noise magnitude, [0.05 means 5% of distance]
 surface_reflections=True#True
 parsing_bool = True
-
+no_visible_neighbors = 0 #for deterministic occlusions, if set to zero this is ignored and normal blindspot etc used
 
 if experiment_type == "fountain":
     pred_bool = True
@@ -102,15 +102,20 @@ arena = np.array(arena_list)
 arena_center = arena / 2.0
 
 # Standard Surface Initialization
+seed_array = np.array([ 2, 7, 8])
+
 initial_spread = 500*2 #pw remove *2
 pos = np.zeros((no_fish, 4))
 vel = np.zeros((no_fish, 4))
+np.random.seed(seed_array[0])
 pos[:,:2] = initial_spread * (np.random.rand(no_fish, 2) - 0.5) + arena_center[:2] # x,y
+np.random.seed(seed_array[1])
 pos[:,2] = 200 * np.random.rand(1, no_fish) + 100 #500 + np.array(range(no_fish))*100 # z, all fish a same noise-free depth results in LJ lock
+np.random.seed(seed_array[2])
 pos[:,3] = 2*math.pi * (np.random.rand(1, no_fish) - 0.5)# phi # np.zeros((1, no_fish)) #pw 2*!!!! put back
 
 # Create Environment, Dynamics, And Heap
-environment = Environment(pos, vel, fish_specs, arena, pred_bool, clock_freq)
+environment = Environment(pos, vel, fish_specs, arena, pred_bool, clock_freq, no_visible_neighbors)
 dynamics = Dynamics(environment)
 
 H = Heap(no_fish + pred_bool)

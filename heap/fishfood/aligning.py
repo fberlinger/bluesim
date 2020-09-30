@@ -12,6 +12,7 @@ from scipy.optimize import linear_sum_assignment
 
 U_LED_DX = 86 # [mm] leds x-distance on BlueBot
 U_LED_DZ = 86 # [mm] leds z-distance on BlueBot
+#looptime = 0 #pw remove
 
 class Fish():
 
@@ -129,6 +130,7 @@ class Fish():
         """(1) Get neighbors from environment, (2) move accordingly, (3) update your state in environment
         """
         robots, rel_pos, dist, leds = self.environment.get_robots(self.id)
+        #print(len(robots))
         if not self.parsing_bool:
             target_pos, vel = self.move_no_parsing(robots, rel_pos, duration)
         else:
@@ -139,13 +141,6 @@ class Fish():
         nr_tracks = len(self.kf_array)
         my_z = self.environment.pos[self.id, 2] #info from depth sensor
 
-        #if there are no tracks, create a new one; pw should I?
-        """
-        if not nr_tracks:
-            kf_new = self.init_kf(np.array([[0],[0],[0]]), np.array([0]))
-            self.kf_array.append(kf_new)
-            nr_tracks = 1
-        """
         #prediction step
         for i in range(nr_tracks):
             self.kf_array[i].predict()
@@ -166,19 +161,20 @@ class Fish():
 
     def kalman_measurement_update(self, xyz, phi, track_ind):
         self.environment.parsing_vector_track = np.zeros((len(self.kf_array),1))
-        for i,j in zip(track_ind, range(len(xyz))):
-            # angles inside kf are not restricted to (-pi, pi) but continous -->add up rotations
-            if phi[j] - self.kf_phi_prev[i] < -pi:
-                self.kf_phi_rotations[i] += 1
-            elif phi[j] - self.kf_phi_prev[i] > pi:
-                self.kf_phi_rotations[i] -= 1
-            self.kf_phi_prev[i] = phi[j]
-            phi[j] += self.kf_phi_rotations[i]*2*pi
+        if len( self.environment.parsing_vector): #pw necessary?
+            for i,j in zip(track_ind, range(len(xyz))):
+                # angles inside kf are not restricted to (-pi, pi) but continous -->add up rotations
+                if phi[j] - self.kf_phi_prev[i] < -pi:
+                    self.kf_phi_rotations[i] += 1
+                elif phi[j] - self.kf_phi_prev[i] > pi:
+                    self.kf_phi_rotations[i] -= 1
+                self.kf_phi_prev[i] = phi[j]
+                phi[j] += self.kf_phi_rotations[i]*2*pi
 
-            measured_state = np.append(xyz[j][:,0], [phi[j]], axis = 0)
-            self.kf_array[i].update(measured_state)
-            self.last_detected[i] = 0
-            self.environment.parsing_vector_track[i] = self.environment.parsing_vector[j]
+                measured_state = np.append(xyz[j][:,0], [phi[j]], axis = 0)
+                self.kf_array[i].update(measured_state)
+                self.last_detected[i] = 0
+                self.environment.parsing_vector_track[i] = self.environment.parsing_vector[j]
 
     def kalman_remove_lost_tracks(self, track_ind):
         #delete all tracks which haven't been detected for too long
@@ -680,7 +676,7 @@ class Fish():
 
         return triplet_new, phi_new
 
-    def home_orient(self, phi_des, v_des): #added pw
+    def home_orient(self, phi_des, v_des):
         """Homing behavior. Sets fin controls to move toward a desired goal orientation.
 
         Args:
@@ -802,8 +798,12 @@ class Fish():
         """Decision-making based on neighboring robots and corresponding move
         """
         self.it_counter += 1
-
+        #looptime = time.time()
         (rel_pos_led1, rel_phi) = self.track_neighbors(detected_blobs)
+        # if self.id == 0: #only print looptime for one fish #pw remove
+        #     print("tracking",time.time() - looptime)
+        #     looptime = time.time()
+
 
         # find target orientation
         center_orient = self.comp_center_orient(rel_phi)
@@ -827,10 +827,14 @@ class Fish():
             v_des = 0
         """
         v_des = 0
+        # if self.id == 0: #only print looptime for one fish #pw remove
+        #     print("center calc",time.time() - looptime)
+        #     looptime = time.time()
+
         self.home_orient(phi_des, v_des) #pw comment back!!
         #self.home_aggregate_align(center_pos, center_orient) #pw to test aggreagation
         #self.depth_ctrl_vert(center_pos[2])
-        z_des = 300 + self.id *30 #so that they are in different heights #300+
+        z_des = 300 #+ self.id *30 #so that they are in different heights
         self.depth_ctrl_vert(z_des-self.environment.pos[self.id][2])
         """ debugging
         self.dorsal = 0
@@ -838,8 +842,14 @@ class Fish():
         self.pect_r = 0
         self.pect_l = 0
         """
+        # if self.id == 0: #only print looptime for one fish #pw remove
+        #     print("home",time.time() - looptime)
+        #     looptime = time.time()
         self.dynamics.update_ctrl(self.dorsal, self.caudal, self.pect_r, self.pect_l, self.id)
         target_pos, self_vel = self.dynamics.simulate_move(self.id, duration)
+        # if self.id == 0: #only print looptime for one fish #pw remove
+        #     print("simulate move",time.time() - looptime)
+        #     looptime = time.time()
 
         return (target_pos, self_vel)
 
@@ -849,9 +859,11 @@ class Fish():
         self.it_counter += 1
         rel_pos_led1 = []
         rel_phi = []
-        for i in range(np.shape(rel_pos)[0]):
-            rel_pos_led1.append(rel_pos[i,:3])
-            rel_phi.append(rel_pos[i,3])
+        if len(robots):
+            for i in range(np.shape(rel_pos)[0]):
+                if i in robots: #only take visible ones
+                    rel_pos_led1.append(rel_pos[i,:3])
+                    rel_phi.append(rel_pos[i,3])
         # find target orientation
         center_orient = self.comp_center_orient(rel_phi)
         center_pos = self.comp_center_pos(rel_pos_led1)
@@ -861,7 +873,7 @@ class Fish():
         v_des = 0
         self.home_orient(phi_des, v_des)
 
-        z_des = 500 + self.id *100 #so that they are in different heights #300 + self.id *30
+        z_des = 300 #same height #so that they are in different heights #300 + self.id *30
         self.depth_ctrl_vert(z_des-self.environment.pos[self.id][2])
         self.dynamics.update_ctrl(self.dorsal, self.caudal, self.pect_r, self.pect_l, self.id)
         target_pos, self_vel = self.dynamics.simulate_move(self.id, duration)
