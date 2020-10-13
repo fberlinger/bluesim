@@ -17,7 +17,7 @@ class Environment():
     Fish get their visible neighbors and corresponding relative positions and distances from here. Fish also update their own positions after moving in here. Environmental tracking data is used for simulation analysis.
     """
 
-    def __init__(self, pos, vel, fish_specs, arena, pred_bool, clock_freq, no_visible_neighbors):
+    def __init__(self, pos, vel, fish_specs, arena, pred_bool, clock_freq, no_visible_neighbors, discrete_no_bins, wrong_solution_prob):
         # Arguments
         self.pos = pos # x, y, z, phi; [no_robots X 4]
         self.vel = vel # pos_dot
@@ -31,12 +31,20 @@ class Environment():
         self.pred_bool = pred_bool
         self.clock_freq = clock_freq
         self.no_visible_neighbors = no_visible_neighbors
+        self.discrete_no_bins = discrete_no_bins
+        self.wrong_solution_prob = wrong_solution_prob
 
         if pred_bool:
             self.escape_angle = fish_specs[6] # escape angle for fish, [rad]
             self.pred_speed = fish_specs[7] # predator speed, [mm/s]
 
         self.fish_factor_speed = fish_specs[8] #slow down fish from max speed with this factor
+        if np.size(fish_specs)>9:
+            self.n_phi = fish_specs[9]
+            self.n_pixel = fish_specs[10]
+        else:
+            self.n_phi = 5 #5 deg as default noise
+            self.n_pixel = 2 #2mm as default
         # Parameters
         self.no_robots = self.pos.shape[0]
         self.no_states = self.pos.shape[1]
@@ -189,7 +197,8 @@ class Environment():
             self.blind_spot(source_id, robots, rel_pos)
             self.occlusions(source_id, robots, rel_pos)
 
-        if self.n_magnitude: # no overwrites of self.rel_pos and self.dist
+
+        if self.n_magnitude or self.n_phi or self.n_pixel: # no overwrites of self.rel_pos and self.dist
             n_rel_pos, n_dist, n_pos = self.visual_noise(source_id, rel_pos)
             leds = self.calc_relative_leds(source_id, robots, n_pos)
             return (robots, n_rel_pos, n_dist, leds)
@@ -275,12 +284,14 @@ class Environment():
     def visual_noise(self, source_id, rel_pos):
         """Adds visual noise
         """
-        noise_phi_mag = 5/180*math.pi #±5deg
-        noise_xyz_mag_max = 100 #mm max noise level (equivalent to 0.05 noise on 2m)
+        noise_phi_mag = self.n_phi /180*np.pi#±5deg
+        noise_xyz_mag_max = self.n_magnitude*2000 #mm max noise level (equivalent to 100mm at 2m distance if choosing n_magnitude = 0.05)
         noise_xyz_mag = np.minimum(self.n_magnitude * np.array([self.dist[source_id]]).T, noise_xyz_mag_max)
-        noise_pos = noise_xyz_mag * 2 *(np.random.rand(self.no_robots, self.no_states-1) - 0.5) # zero-mean uniform noise scaled with distance
-        noise_phi = noise_phi_mag * 2 * (np.random.rand(self.no_robots, 1) - 0.5) # zero-mean uniform noise on phi
-        noise = np.append(noise_pos, noise_phi, axis = 1)
+        mu, sigma = 0, noise_xyz_mag # mean and standard deviation
+        noise_pos = np.random.normal(mu, sigma, (self.no_robots, self.no_states-1)) # zero-mean gaussian noise scaled with distance
+        mu, sigma = 0, noise_phi_mag # mean and standard deviation
+        noise_phi = np.random.normal(mu, sigma, (self.no_robots, 1)) # zero-mean gaussian noise on phi
+        noise = np.append(noise_pos, noise_phi, axis=1)
         n_rel_pos = rel_pos + noise
         n_dist = np.linalg.norm(n_rel_pos[:,:3], axis=1) # new dist without phi
         n_pos = self.pos + noise #to have the equivalent noise to rel_pos noise, it would have to be rotated, but as its random it doesnt matter
@@ -336,9 +347,10 @@ class Environment():
         all_blobs = np.empty((3,0))
         leds = []
         for robot in robots:
-            if self.n_magnitude:
-                noise_led_mag = 1 #mm , noise on inidivual leds ±1mm
-                noise_led = noise_led_mag * 2* (np.random.rand(3, 3) - 0.5) # zero-mean uniform noise#add different noise on all 3 leds
+            if self.n_pixel:
+                noise_led_mag = self.n_pixel #mm , noise on inidivual leds ±2mm
+                mu, sigma = 0, noise_led_mag
+                noise_led = np.random.normal(mu, sigma, (3, 3)) # zero-mean gaussian noise, different noise for all 3 leds, "pixel noise"
                 led_pos_n = self.calc_leds(n_pos[robot,:])
                 leds.append(led_pos_n + noise_led)
             else:
@@ -499,7 +511,7 @@ class Environment():
 
     def count_wrong_refl_removal(self, blob_ind_list):
         p = self.leds_random_permutation
-        no_visible_fish = len(p)//(3*(1+self.surface_reflections))
+        no_visible_fish = len(p)//(3*(1+int(self.surface_reflections)))
         wrong_refl_removal = 0
         for blob_ind in blob_ind_list:
             orig_ind = p[blob_ind]

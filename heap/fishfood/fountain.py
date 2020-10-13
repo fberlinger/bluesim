@@ -297,10 +297,10 @@ class Fish():
             self.behavior = "predator_escape"
             print(self.id, "predator_escape")
             self.escape_started = True
-            pred_alpha = np.arctan2(pred_pos[1], pred_pos[0])
-            angle_sum =  pred_alpha - center_orient #correct my own perspective by my orientation towards swarm pw problem is that swarm is already swimming away --> center_orient not meaningful
-            if np.arctan2(sin(angle_sum), cos(angle_sum)) < 0:
-            #if pred_pos[1] < 0:
+            # pred_alpha = np.arctan2(pred_pos[1], pred_pos[0])
+            # angle_sum =  pred_alpha - center_orient #correct my own perspective by my orientation towards swarm pw problem is that swarm is already swimming away --> center_orient not meaningful
+            # if np.arctan2(sin(angle_sum), cos(angle_sum)) < 0:
+            if pred_pos[1] < 0:
                 self.escape_angle *= -1
 
         return (phi_des, v_des)
@@ -323,7 +323,7 @@ class Fish():
             if len(self.phi_des_history) > history_len_max:
                 self.phi_des_history.pop(0)
             v_des = min(1, (2 - 2*abs(phi_des)/pi))#make v_des dependend on phi_des : if aligned swim faster, pw choose non linear relation?
-            if np.linalg.norm(pred_pos[:2]) > 2500: #pw tune max distance
+            if np.linalg.norm(pred_pos[:2]) > 2500: #pw tune max distance #CODERED: 70000
                 self.behavior = "keep_turning"
                 print(self.id, "pred too far away, keep turning")
 

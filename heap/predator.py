@@ -49,7 +49,9 @@ class Predator():
     def start_pred(self, pred_phi, fish_center):
         fish_point1 = fish_center - np.array([cos(pred_phi), sin(pred_phi), 0])*10*self.environment.arena_size[0] #approach from behind, just choose big enough factor to get out of tank for sure
         fish_path = LineString([tuple(fish_center[0:2]), tuple(fish_point1[0:2])])
-        tank = LinearRing([(0, 0), (self.environment.arena_size[0], 0), (self.environment.arena_size[0], self.environment.arena_size[1]), (0, self.environment.arena_size[1])])
+        #tank = LinearRing([(0, 0), (self.environment.arena_size[0], 0), (self.environment.arena_size[0], self.environment.arena_size[1]), (0, self.environment.arena_size[1])])
+        tank = LinearRing([(0, 0), (self.environment.arena_size[0]*3/4, self.environment.arena_size[1]/4), (self.environment.arena_size[0]*3/4, self.environment.arena_size[1]*3/4), (self.environment.arena_size[0]/4, self.environment.arena_size[1]*3/4)])
+        #tank = LinearRing([(0, 0), (self.environment.arena_size[0]*3/5, self.environment.arena_size[1]*2/5), (self.environment.arena_size[0]*3/5, self.environment.arena_size[1]*3/5), (self.environment.arena_size[0]*2/5, self.environment.arena_size[1]*3/5)]) #CODERED
 
         intersect = fish_path.intersection(tank)
         print("predator started")
@@ -88,7 +90,7 @@ class Predator():
 
         else:
             fish_phi_mean, fish_phi_std = self.calc_phi_mean_std()
-            std_thresh = 0.25
+            std_thresh = 0.1
             #print(fish_phi_std)
 
             if fish_phi_std < std_thresh: #well enough aligned

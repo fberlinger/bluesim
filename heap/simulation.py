@@ -58,7 +58,7 @@ def log_meta():
 try:
     experiment_type = sys.argv[1]
 except:
-    experiment_type ='aligning'# 'fountain' #
+    experiment_type = 'aligning'#'fountain' #
     print('No experiment description provided, using as default', experiment_type)
 
 Fish = getattr(importlib.import_module('fishfood.' + experiment_type), 'Fish') #import Fish class directly from module specified by experiment type
@@ -68,43 +68,47 @@ for kf_file in glob.glob("./logfiles/kf*"):
     os.remove(kf_file)
 
 # Experimental Parameters
-no_fish = 50
+no_fish = 7
 simulation_time = 60 # [s]
 clock_freq = 2 # [Hz]
 clock_rate = 1/clock_freq
 
 # Fish Specifications
-v_range=4000 # visual range, [mm]
+v_range=4000 #CODERED:10000 # visual range, [mm]
 w_blindspot=50 # width of blindspot, [mm]
 r_sphere=50 # radius of blocking sphere for occlusion, [mm]
-n_magnitude=0.05 # visual noise magnitude, [0.05 means 5% of distance]
+n_magnitude=0.05 # visual noise magnitude on position, [0.05 means 5% of distance]
+n_pixel = 2 #mm
+n_phi=10 #[deg] visual noise on the angle phi, 5deg as default noise
 surface_reflections=True#True
-parsing_bool = True
+parsing_bool = False
 no_visible_neighbors = 0 #for deterministic occlusions, if set to zero this is ignored and normal blindspot etc used
+discrete_no_bins = 4# for discrete bins, if set to zero this is ignored and normal code runs. choose 2, 4, or 8
+wrong_solution_prob = 0# set zero for normal case
 
 if experiment_type == "fountain":
     pred_bool = True
-    escape_angle = 60 * math.pi/180 # escape angle for fish, [rad]
+    escape_angle = 150 * math.pi/180 # escape angle for fish, [rad]
     fish_factor_speed = 0.05 #slow down fish from max speed with this factor, keep at 0.05
-    pred_speed = 50 # [mm/s] (good range: 40-50, max fish speed is approx 60mm/s with fish_factor_speed = 0.05)
+    pred_speed = 50#CODERED: 35 # [mm/s] (good range: 40-50, max fish speed is approx 60mm/s with fish_factor_speed = 0.05)
 else:
     pred_bool = False
     escape_angle = []
     fish_factor_speed = []
     pred_speed = []
 
-fish_specs = (v_range, w_blindspot, r_sphere, n_magnitude, surface_reflections, parsing_bool, escape_angle, pred_speed, fish_factor_speed)
+fish_specs = (v_range, w_blindspot, r_sphere, n_magnitude, surface_reflections, parsing_bool, escape_angle, pred_speed, fish_factor_speed, n_phi, n_pixel)
 # Standard Tank
 arena_list = [1780, 1780, 1170]
-#arena_list = [2*x for x in arena_list] #pw comment for fountain more space
+arena_list = [2*x for x in arena_list] #pw comment for fountain more space #CODERED 5x
 #arena_list = [17800, 17800, 1170]# pw comment for fountain more space
 arena = np.array(arena_list)
 arena_center = arena / 2.0
 
 # Standard Surface Initialization
-seed_array = np.array([ 2, 7, 8])
+seed_array = np.array([ 2, 60, 12])
 
-initial_spread = 500*2 #pw remove *2
+initial_spread = 500#CODERED *2
 pos = np.zeros((no_fish, 4))
 vel = np.zeros((no_fish, 4))
 np.random.seed(seed_array[0])
@@ -115,7 +119,7 @@ np.random.seed(seed_array[2])
 pos[:,3] = 2*math.pi * (np.random.rand(1, no_fish) - 0.5)# phi # np.zeros((1, no_fish)) #pw 2*!!!! put back
 
 # Create Environment, Dynamics, And Heap
-environment = Environment(pos, vel, fish_specs, arena, pred_bool, clock_freq, no_visible_neighbors)
+environment = Environment(pos, vel, fish_specs, arena, pred_bool, clock_freq, no_visible_neighbors, discrete_no_bins, wrong_solution_prob)
 dynamics = Dynamics(environment)
 
 H = Heap(no_fish + pred_bool)

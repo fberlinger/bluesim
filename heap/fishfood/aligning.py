@@ -45,6 +45,7 @@ class Fish():
 
         self.wo_kf = False
         self.parsing_bool = self.environment.parsing_bool
+        self.wrong_solution_prob = self.environment.wrong_solution_prob
 
 
         # Logger instance
@@ -389,9 +390,16 @@ class Fish():
         diff_z_plus = abs(z1 - d_plus*pqr_3[2])
         diff_z_minus = abs(z1 - d_minus*pqr_3[2])
         #print("diff_z_plus,diff_z_minus",diff_z_plus,diff_z_minus)
+        #wrong_solution_prob = 0.0 #to simulate wrong solution, set to zero in normal case!!
         if (diff_z_plus < diff_z_minus): #choose solution for which led 3 is closer to same vertical height to led1
             xyz_3 = d_plus * pqr_3
+            #simulate wrong solution
+            if np.random.rand(1) < self.wrong_solution_prob:
+                xyz_3 = d_minus * pqr_3
         else:
+            #simulate wrong solution
+            if np.random.rand(1) < self.wrong_solution_prob:
+                xyz_3 = d_plus * pqr_3
             xyz_3 = d_minus * pqr_3
 
         xyz = np.append(xyz_1_2, xyz_3[:,np.newaxis], axis=1)
@@ -803,12 +811,21 @@ class Fish():
         # if self.id == 0: #only print looptime for one fish #pw remove
         #     print("tracking",time.time() - looptime)
         #     looptime = time.time()
+        #DISCRETE VISION
+        if self.environment.discrete_no_bins:
+            no_bins = self.environment.discrete_no_bins
+            bins = np.linspace(2*np.pi/no_bins,2*np.pi, num=no_bins)
+            phi = np.arctan2(np.sin(rel_phi), np.cos(rel_phi)) + np.pi #make range (0,2pi)
+            ind = np.digitize(phi, bins, right=True)
+            discrete_phi = bins[ind] - np.pi/no_bins #shift value into middle of bin
+            #print(rel_phi, discrete_phi - np.pi)
+            rel_phi = discrete_phi - np.pi #back to range (-pi,pi)
 
 
         # find target orientation
         center_orient = self.comp_center_orient(rel_phi)
         center_pos = self.comp_center_pos(rel_pos_led1)
-
+        #print(rel_phi)
         phi_des = center_orient
         #phi_des = (np.random.rand()-0.5)*pi #pw remove!!!
         """
@@ -865,9 +882,18 @@ class Fish():
                     rel_pos_led1.append(rel_pos[i,:3])
                     rel_phi.append(rel_pos[i,3])
         # find target orientation
-        center_orient = self.comp_center_orient(rel_phi)
-        center_pos = self.comp_center_pos(rel_pos_led1)
+        if self.environment.discrete_no_bins:
+            no_bins = self.environment.discrete_no_bins
+            bins = np.linspace(2*np.pi/no_bins,2*np.pi, num=no_bins)
+            phi = np.arctan2(np.sin(rel_phi), np.cos(rel_phi)) + np.pi #make range (0,2pi)
+            ind = np.digitize(phi, bins, right=True)
+            discrete_phi = bins[ind] - np.pi/no_bins #shift value into middle of bin
+            #print(rel_phi, discrete_phi - np.pi)
+            rel_phi = discrete_phi - np.pi #back to range (-pi,pi)
 
+        center_orient = self.comp_center_orient(rel_phi)
+        #center_pos = self.comp_center_pos(rel_pos_led1)
+        #print(rel_phi)
         phi_des = center_orient
 
         v_des = 0
