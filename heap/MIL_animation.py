@@ -29,7 +29,7 @@ except:
     print('Provide prefix of data you want to animate in format yymmdd_hhmmss as command line argument, e.g.:\n >python animation.py 201005_111211')
     sys.exit()
 try:
-    data = np.loadtxt('./logfiles/{}_data.txt'.format(filename), delimiter=',')
+    data = np.loadtxt('./logfiles/{}.txt'.format(filename), delimiter=',')
     with open('./logfiles/{}_meta.txt'.format(filename), 'r') as f:
         meta = json.loads(f.read())
 except:

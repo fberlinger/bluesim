@@ -2,20 +2,21 @@
 """
 from math import *
 import numpy as np
+import random
 import time
 
 class Fish():
     """Bluebot instance
     """
     
-    def __init__(self, my_id, target_dist, dynamics, environment):
+    def __init__(self, my_id, dynamics, environment):
         # Arguments
         self.id = my_id
         self.dynamics = dynamics
         self.environment = environment
 
         # Bluebot features
-        self.body_length = 130
+        self.body_length = 160
 
         # Fins
         self.caudal = 0
@@ -23,8 +24,8 @@ class Fish():
         self.pect_r = 0
         self.pect_l = 0
 
-        # Experimental parameter
-        self.r_target = target_dist * self.body_length
+        # Behavior specific
+        self.target_depth = random.randint(250, 300)
 
 
     def run(self, duration):
@@ -33,29 +34,6 @@ class Fish():
         robots, rel_pos, dist = self.environment.get_robots(self.id)
         target_pos, vel = self.move(robots, rel_pos, dist, duration)
         self.environment.update_states(self.id, target_pos, vel)
-
-    def lj_force(self, robots, rel_pos, dist):
-        """lj_force derives the Lennard-Jones potential and force based on the relative positions of all neighbors and the desired self.target_dist to neighbors. The force is a gain factor, attracting or repelling a fish from a neighbor. The center is a point in space toward which the fish will move, based on the sum of all weighted neighbor positions.
-        """
-        a = 12
-        b = 6
-        epsilon = 100 # depth of potential well, V_LJ(r_target) = epsilon
-        gamma = 1 # force gain
-        r_const = 1.1*self.r_target# + 2 * self.body_length
-
-        center = np.zeros((3,))
-        n = len(robots)
-
-        for robot in robots:
-            r =min(dist[robot], r_const)
-            f_lj = -gamma*epsilon/r * (a*(self.r_target/r)**a - 2*b*(self.r_target/r)**b)
-            center += f_lj * rel_pos[robot,:3]
-
-        center /= n
-        magn = np.linalg.norm(center) # normalize
-        center /= magn # normalize
-
-        return (center, magn)
 
     def depth_ctrl_vision(self, r_move_g):
         """Vision-like depth control
@@ -86,46 +64,37 @@ class Fish():
         else:
             self.dorsal = 0
 
-    def home(self, r_move_g, magnitude):
-        """Homing behavior. Sets fin controls to move toward a desired goal location.
-        
-        Args:
-            r_move_g (np.array): Relative position of desired goal location in robot frame.
-            magnitude (TYPE): Description
-        """
-        caudal_range = 35 # abs(heading) below which caudal fin is switched on
-        freq_c = min(1.5/4 + 1/1000 * magnitude, 0.5) # 0.5 should be some 2 Hz
+    def circling(self, robots, rel_pos):
+        sensing_angle = 150 #deg
 
-        # target lost or occluded
-        if not r_move_g.size:
-            self.pect_r = 0
+        if not robots:
+            '''
             self.pect_l = 0
-            self.caudal = 0
-            return
-
-        heading = np.arctan2(r_move_g[1], r_move_g[0]) * 180 / pi
-        # target behind
-        if heading > 155 or heading < -155:
-            self.caudal = 0
             self.pect_r = 0.5
+            self.caudal = 0.1
+            '''
+            move = np.array([4, -1, 0])
+            return move
+        
+        #someone = self.environment.see_circlers(self.id, robots, rel_pos, sensing_angle)
+        someone = self.environment.see_circlers_LoS(self.id, robots, rel_pos)
+
+        if someone:
+            '''
+            self.pect_r = 0
             self.pect_l = 0.5
-
-        # target in front
-        elif heading < 10 and heading > -10:
-            self.pect_r = 0
+            self.caudal = 0.1
+            '''
+            move = np.array([4, 1, 0])
+        else:
+            '''
             self.pect_l = 0
-            self.caudal = freq_c
+            self.pect_r = 0.5
+            self.caudal = 0.1
+            '''
+            move = np.array([4, -1, 0])
 
-        # target to the right
-        elif heading > 10:
-            freq_l = 0.2 + 0.3 * abs(heading) / 155
-            self.pect_l = freq_l
-            self.pect_r = 0
-
-            if heading < caudal_range:
-                self.caudal = freq_c
-            else:
-                self.caudal = 0
+        return move
 
     def move(self, robots, rel_pos, dist, duration):
         """Decision-making based on neighboring robots and corresponding move
@@ -135,8 +104,10 @@ class Fish():
             return (target_pos, self_vel)
 
         # Define your move here
-        center, magnitude = self.lj_force(robots, rel_pos, dist)
-        move = center
+        move = self.circling(robots, rel_pos)
+        #magn = np.linalg.norm(move) # normalize
+        #move /= magn
+        #print(move)
 
         '''
         # Global to Robot Transformation
@@ -153,8 +124,14 @@ class Fish():
         '''
 
         # POINT-MASS MOVE AT CONSTANT SPEED (0.5 BL PER ITERATION = 1 BL / S)
-        pos = self.environment.pos[self.id,:3] + move * self.body_length
-        target_pos = np.concatenate((pos, np.array([0])), axis=0)
+        phi = self.environment.pos[self.id,3]
+        r_T_r = self.environment.rot_robot_to_global(phi)
+        r_move_r = r_T_r @ move
+
+        pos = self.environment.pos[self.id,:]
+        pos[:3] += r_move_r * self.body_length/10
+        pos[3] += np.arctan2(move[1], move[0])
+        target_pos = pos #np.concatenate((pos, np.array([0])), axis=0)
         self_vel = np.array([0, 0, 0 ,0])
 
         return (target_pos, self_vel)

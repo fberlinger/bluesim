@@ -35,14 +35,15 @@ class Environment():
         self.init_tracking()
 
         # Initialize LEDs
-        self.leds_pos = [np.zeros((3,3))]*self.no_robots # empty init, filled with update_leds() below
-        for robot in range(self.no_robots):
-            self.update_leds(robot)
+        #self.leds_pos = [np.zeros((3,3))]*self.no_robots # empty init, filled with update_leds() below
+        #for robot in range(self.no_robots):
+        #    self.update_leds(robot)
 
     def log_to_file(self, filename):
         """Logs tracking data to file
         """
-        np.savetxt('./logfiles/{}_data.txt'.format(filename), self.tracking, fmt='%.2f', delimiter=',')
+        #np.savetxt('./logfiles/{}_data.txt'.format(filename), self.tracking, fmt='%.2f', delimiter=',')
+        np.savetxt('./logfiles/{}.txt'.format(filename), self.tracking, fmt='%.2f', delimiter=',')
 
     def init_tracking(self):
         """Initializes tracking
@@ -121,7 +122,7 @@ class Environment():
         self.dist[:,source_id] = dist.T
 
         # Update LEDs
-        self.update_leds(source_id)
+        #self.update_leds(source_id)
 
         # Update tracking
         self.updates += 1
@@ -137,6 +138,10 @@ class Environment():
 
         rel_pos = np.reshape(self.rel_pos[source_id], (self.no_robots, self.no_states))
 
+        return (robots, rel_pos, self.dist[source_id])
+
+        # perfect vision here
+        '''
         self.visual_range(source_id, robots)
         self.blind_spot(source_id, robots, rel_pos)
         self.occlusions(source_id, robots, rel_pos)
@@ -147,6 +152,7 @@ class Environment():
             n_rel_pos, n_dist = self.visual_noise(source_id, rel_pos)
             return (robots, n_rel_pos, n_dist, leds)
         return (robots, rel_pos, self.dist[source_id], leds)
+        '''
 
     def visual_range(self, source_id, robots):
         """Deletes fishes outside of visible range
@@ -251,6 +257,27 @@ class Environment():
                 if (angle*180/math.pi) < (sensing_angle/2):
                     return True
 
+        return False
+
+    def see_circlers_LoS(self, source_id, robots, rel_pos):
+        '''For circle formation
+        '''
+        r_blockage = 80
+
+        phi = self.pos[source_id,3]
+        phi_xy = [math.cos(phi), math.sin(phi)]
+        mag_phi = np.linalg.norm(phi_xy)
+        
+        candidates = robots.copy()
+        for robot in candidates:
+            dot = np.dot(phi_xy, rel_pos[robot,:2])
+            if dot > 0:
+                d_robot = np.linalg.norm(rel_pos[robot,:2])
+
+                angle = abs(math.acos(dot / (mag_phi * d_robot))) - math.pi / 2 # cos(a-b) = ca*cb+sa*sb = sa
+
+                if  math.cos(angle) * d_robot < r_blockage:
+                    return True
         return False
 
     def rot_global_to_robot(self, phi):
