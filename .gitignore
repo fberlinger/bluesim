@@ -4,3 +4,4 @@ __pycache__/
 #git ignore log files
 logfiles/
 animations/
+.DS_Store
