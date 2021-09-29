@@ -63,7 +63,7 @@ simulation_time = 120 # [s]
 clock_freq = 2 # [Hz]
 clock_rate = 1/clock_freq
 no_fishes = 10
-alphas = [i for i in range(0,21,2)]
+alphas = [i for i in range(0,13,2)]
 test_runs = 100
 
 # Fish Specifications
@@ -74,7 +74,7 @@ n_magnitude = 0.1 # visual noise magnitude, [% of distance]
 fish_specs = (v_range, w_blindspot, r_sphere, n_magnitude)
 
 # Standard Tank
-arena_list = [elem * 3 for elem in [1780, 1780, 1170]]
+arena_list = [elem * 10 for elem in [1780, 1780, 1170]] # 2000
 arena = np.array(arena_list)
 arena_center = arena / 2.0
 
