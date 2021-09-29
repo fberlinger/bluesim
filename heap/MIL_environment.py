@@ -216,7 +216,7 @@ class Environment():
                 d_verified = rel_dist[verified]
                 coord_verified = rel_pos[verified,:3]
 
-                theta_min = math.atan(self.r_sphere / d_verified)
+                theta_min = math.asin(self.r_sphere / d_verified) # was atan
                 theta = abs(math.acos(np.dot(coord_robot, coord_verified) / (d_robot * d_verified)))
 
                 if theta < theta_min:
@@ -242,6 +242,8 @@ class Environment():
     def see_circlers(self, source_id, robots, rel_pos, sensing_angle):
         '''For circle formation
         '''
+        r_blockage = 80
+
         phi = self.pos[source_id,3]
         phi_xy = [math.cos(phi), math.sin(phi)]
         mag_phi = np.linalg.norm(phi_xy)
@@ -251,10 +253,14 @@ class Environment():
             dot = np.dot(phi_xy, rel_pos[robot,:2])
             if dot > 0:
                 d_robot = np.linalg.norm(rel_pos[robot,:2])
+                if d_robot < r_blockage: # collision
+                    return False
 
                 angle = abs(math.acos(dot / (mag_phi * d_robot)))
+                angle_sphere = abs(math.asin(r_blockage / d_robot))
 
-                if (angle*180/math.pi) < (sensing_angle/2):
+                if angle*180/math.pi < sensing_angle + angle_sphere*180/math.pi:
+                    #print(angle*180/math.pi)
                     return True
 
         return False
@@ -276,7 +282,7 @@ class Environment():
 
                 angle = abs(math.acos(dot / (mag_phi * d_robot))) - math.pi / 2 # cos(a-b) = ca*cb+sa*sb = sa
 
-                if  math.cos(angle) * d_robot < r_blockage:
+                if math.cos(angle) * d_robot < r_blockage:
                     return True
         return False
 
