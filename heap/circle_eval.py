@@ -23,16 +23,19 @@ def calc_circle(pos, no_fish, test_run):
 	"""
 
 	no_samples = 240 # sample and check for convergence
-	sample_increment = np.floor(pos.shape[0] / no_samples).astype(int)
+	sample_increment = pos.shape[0] / no_samples
 	converged = False
 	t_convergence = -1
+	error_dist = np.zeros((no_samples, 1))
+	spread = np.zeros((no_samples, 1))
 
 	fig, ax = plt.subplots(4,3)
 	ax = ax.ravel()
 
 	for ii in range(no_samples):
 		# Input
-		pos_ii = np.reshape(pos[ii*sample_increment,:], (-1,4))
+		sample = np.floor(ii*sample_increment).astype(int)
+		pos_ii = np.reshape(pos[sample,:], (-1,4))
 		X = np.array([pos_ii[:,0]]).T
 		Y = np.array([pos_ii[:,1]]).T
 
@@ -52,14 +55,15 @@ def calc_circle(pos, no_fish, test_run):
 		# Error
 		r = np.sqrt((X-x_c)**2 + (Y-y_c)**2)
 		error = np.sum((r - r_c)**2)
+		error_dist[ii] = abs(np.sum(r - r_c))
 		max_r = max(r)
 		min_r = min(r)
 
 		# Spread
-		spread = np.sqrt((np.sum(X) - no_robots*x_c)**2 + (np.sum(Y) - no_robots*y_c)**2)
+		spread[ii] = np.sqrt((np.sum(X) - no_robots*x_c)**2 + (np.sum(Y) - no_robots*y_c)**2)
 		
 		# Convergence
-		if converged == False and 1.1*r[0] > max_r[0] and 0.9*r[0] < min_r[0] and spread < 1.5*r_c:
+		if converged == False and 1.1*r[0] > max_r[0] and 0.9*r[0] < min_r[0] and spread[ii] < 1.5*r_c:
 			converged = True
 			t_convergence = ii
 
@@ -77,7 +81,9 @@ def calc_circle(pos, no_fish, test_run):
 	
 	if test_run == 0:
 		plt.savefig('plots/{}_{}.png'.format(no_fish, test_run), dpi = 1000, bbox_inches = "tight", pad_inches = 1, orientation = 'landscape')
-	if t_convergence == -1:
-		plt.savefig('plots/{}_{}_failed.png'.format(no_fish, test_run), dpi = 1000, bbox_inches = "tight", pad_inches = 1, orientation = 'landscape')
+		errors = np.concatenate((error_dist, spread), axis=1)
+		np.savetxt('./logfiles/errors/{}_{}_errors.txt'.format(no_fish, test_run), errors, fmt='%.2f', delimiter=',')
+	#if t_convergence == -1:
+	#	plt.savefig('plots/{}_{}_failed.png'.format(no_fish, test_run), dpi = 1000, bbox_inches = "tight", pad_inches = 1, orientation = 'landscape')
 
 	return x_c, y_c, r_c, error, max_r, min_r, t_convergence
