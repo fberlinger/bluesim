@@ -74,6 +74,8 @@ class Fish():
             self.caudal = 0.1
             '''
             move = np.array([4, -1, 0])
+            #move = np.array([4.09, -0.49, 0]) # 2r
+            #move = np.array([4.12, -0.2, 0]) # 5r
             return move
         
         #someone = self.environment.see_circlers(self.id, robots, rel_pos, sensing_angle)
@@ -86,6 +88,8 @@ class Fish():
             self.caudal = 0.1
             '''
             move = np.array([4, 1, 0])
+            #move = np.array([4.09, 0.49, 0]) # 2r
+            #move = np.array([4.12, 0.2, 0]) # 5r
         else:
             '''
             self.pect_l = 0
@@ -93,6 +97,8 @@ class Fish():
             self.caudal = 0.1
             '''
             move = np.array([4, -1, 0])
+            #move = np.array([4.09, -0.49, 0]) # 2r
+            #move = np.array([4.12, -0.2, 0]) # 5r
 
         return move
 

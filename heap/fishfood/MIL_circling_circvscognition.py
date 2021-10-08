@@ -31,6 +31,20 @@ class Fish():
         self.target_depth = random.randint(250, 300)
 
     def _move_vector(self, freq):
+        """Move speed is fixed (vector length and direction).
+        But here, frequencies are chaning. So, given a freq,
+        we adjust the move vector accordingly, taking 2 Hz and
+        a vector of (4,1) as our base case.
+        
+        Length: sqrt(4**2 + 1**2) = 4.12
+        Direction: arctan(1/4) = 14 deg
+        
+        Args:
+            freq (float): Cognition speed [Hz]
+        
+        Returns:
+            floats: move vector (x, y)
+        """
         x_ = 1 / np.tan((14 / 180 * pi) * (2 / freq))
         m = ((2 / freq * 4.12) / np.sqrt(x_**2 + 1))
 

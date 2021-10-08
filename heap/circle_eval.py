@@ -81,8 +81,8 @@ def calc_circle(pos, no_fish, test_run):
 	
 	if test_run == 0:
 		plt.savefig('plots/{}_{}.png'.format(no_fish, test_run), dpi = 1000, bbox_inches = "tight", pad_inches = 1, orientation = 'landscape')
-		errors = np.concatenate((error_dist, spread), axis=1)
-		np.savetxt('./logfiles/errors/{}_{}_errors.txt'.format(no_fish, test_run), errors, fmt='%.2f', delimiter=',')
+		#errors = np.concatenate((error_dist, spread), axis=1)
+		#np.savetxt('./logfiles/errors/{}_{}_errors.txt'.format(no_fish, test_run), errors, fmt='%.2f', delimiter=',')
 	#if t_convergence == -1:
 	#	plt.savefig('plots/{}_{}_failed.png'.format(no_fish, test_run), dpi = 1000, bbox_inches = "tight", pad_inches = 1, orientation = 'landscape')
 
