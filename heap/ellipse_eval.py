@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 
 
-def calc_circle(pos, no_fish, test_run):
+def calc_ellipse(pos, no_fish, test_run):
 	"""Fits a 2D circle to X,Y data points using the Coope method and linear least squares:
 	
 	(X-Xc)**2 + (Y-Yc)**2 = R**2
@@ -22,7 +22,7 @@ def calc_circle(pos, no_fish, test_run):
 	    floats: fitted circle parameters and convergence time
 	"""
 
-	no_samples = 240 # sample and check for convergence
+	no_samples = 240 #240 # sample and check for convergence
 	sample_increment = pos.shape[0] / no_samples
 	converged = False
 	t_convergence = -1
@@ -63,14 +63,30 @@ def calc_circle(pos, no_fish, test_run):
 		spread[ii] = np.sqrt((np.sum(X) - no_robots*x_c)**2 + (np.sum(Y) - no_robots*y_c)**2)
 		
 		# Convergence
-		#if converged == False and 1.1*r[0] > max_r[0] and 0.9*r[0] < min_r[0] and spread[ii] < 1.5*r_c:
-		if converged == False and 1.25*r[0] > max_r[0] and 0.75*r[0] < min_r[0] and spread[ii] < 1.5*r_c:
+		if converged == False and 1.1*r[0] > max_r[0] and 0.9*r[0] < min_r[0] and spread[ii] < 1.5*r_c:
+		#if converged == False and 1.25*r[0] > max_r[0] and 0.75*r[0] < min_r[0] and spread[ii] < 1.5*r_c:
 			converged = True
 			t_convergence = ii
 
 		# Plot
 		if ii % 20 == 0: # plot no_samples / no_subplots times
+			# SVD for ellipse
+			'''
+			N = no_robots
+			xmean, ymean = X.mean(), Y.mean()
+			x = X - xmean
+			y = Y - ymean
+			U, S, V = np.linalg.svd(np.reshape(np.stack((x, y)), (2, no_robots)))
+
+			tt = np.linspace(0, 2*np.pi, 1000)
+			circle = np.stack((np.cos(tt), np.sin(tt)))    # unit circle
+			transform = np.sqrt(2/N) * U.dot(np.diag(S))   # transformation matrix
+			fit = transform.dot(circle) + np.array([[xmean], [ymean]])
+			'''
+
+			# Actual plot
 			ax[int(ii/20)].scatter(X, Y, color=colors, s=25)
+			#ax[int(ii/20)].plot(fit[0, :], fit[1, :], color='r', linewidth=1.0)
 			c_c = plt.Circle((x_c, y_c), r_c, color='r', linewidth=1.0, fill=False)
 			c_max = plt.Circle((x_c, y_c), max_r, linestyle='dashed', linewidth=0.5, fill=False)
 			c_min = plt.Circle((x_c, y_c), min_r, linestyle='dashed', linewidth=0.5, fill=False)
@@ -89,3 +105,4 @@ def calc_circle(pos, no_fish, test_run):
 		plt.savefig('plots/{}_{}_failed.png'.format(no_fish, test_run), dpi = 1000, bbox_inches = "tight", pad_inches = 1, orientation = 'landscape')
 
 	return x_c, y_c, r_c, error, max_r, min_r, t_convergence
+
