@@ -286,6 +286,27 @@ class Environment():
                     return True
         return False
 
+    def see_circlers_disp(self, source_id, robots, rel_pos):
+        '''For circle formation
+        '''
+        r_blockage = 80
+
+        phi = self.pos[source_id,3]
+        phi_xy = [math.cos(phi), math.sin(phi)]
+        mag_phi = np.linalg.norm(phi_xy)
+        
+        candidates = robots.copy()
+        for robot in candidates:
+            dot = np.dot(phi_xy, rel_pos[robot,:2])
+            if dot < 0:
+                d_robot = np.linalg.norm(rel_pos[robot,:2])
+
+                angle = abs(math.acos(dot / (mag_phi * d_robot))) - math.pi / 2 # cos(a-b) = ca*cb+sa*sb = sa
+
+                if math.cos(angle) * d_robot < r_blockage:
+                    return True
+        return False
+
     def rot_global_to_robot(self, phi):
         """Rotate global coordinates to robot coordinates. Used before simulation of dynamics.
         """
