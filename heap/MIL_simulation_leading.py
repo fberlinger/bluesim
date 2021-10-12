@@ -59,10 +59,10 @@ Fish = getattr(importlib.import_module('fishfood.' + experiment_file), 'Fish')
 ## Feel free to loop over multiple simulations with different parameters! ##
 
 # Experimental Parameters
-simulation_time = 300 # [s]
+simulation_time = 120 # [s]
 clock_freqs = [2] # [Hz]
-no_fishes = 10
-alpha = 0
+no_fishes = 7
+alpha = 10
 test_runs = 1
 
 # Fish Specifications
@@ -73,7 +73,7 @@ n_magnitude = 0.1 # visual noise magnitude, [% of distance]
 fish_specs = (v_range, w_blindspot, r_sphere, n_magnitude)
 
 # Standard Tank
-arena_list = [elem * 5 for elem in [1780, 1780, 1170]] # 2000
+arena_list = [elem * 4 for elem in [1780, 1780, 1170]] # 2000
 arena = np.array(arena_list)
 arena_center = arena / 2.0
 
@@ -90,7 +90,7 @@ for freq_iter, clock_freq in enumerate(clock_freqs):
         pos[:,2] = 10 * np.random.rand(1, no_fishes) # z, all fish at same noise-free depth results in LJ lock
         pos[:,3] = 2*math.pi * (np.random.rand(1, no_fishes) - 0.5) # phi
 
-        # Special leader fish
+        ## for external leader
         #pos[0,:] = [1.5*arena_center[0], 0.5*arena_center[1], 0, 0.75*math.pi]
 
         # Create Environment, Dynamics, And Heap
@@ -123,7 +123,12 @@ for freq_iter, clock_freq in enumerate(clock_freqs):
 
             (uuid, event_time) = H.delete_min()
             duration = random.gauss(clock_rate, 0.1*clock_rate)
-            fishes[uuid].run(duration)
+            ## for external leader
+            #if uuid == 0 and progress < 0.25:
+            #    pass
+            #else:
+            #    fishes[uuid].run(duration, progress)
+            fishes[uuid].run(duration, progress)
             H.insert(uuid, event_time + duration)
 
             steps += 1

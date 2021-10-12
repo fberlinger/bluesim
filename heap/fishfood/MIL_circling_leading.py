@@ -30,6 +30,9 @@ class Fish():
         # Behavior specific
         self.target_depth = random.randint(250, 300)
 
+        self.progress = 0
+        self.trigger = 0
+
     def _move_vector(self, freq):
         """Move speed is fixed (vector length and direction).
         But here, frequencies are chaning. So, given a freq,
@@ -52,9 +55,10 @@ class Fish():
         y = m
         return x, y
 
-    def run(self, duration):
+    def run(self, duration, progress):
         """(1) Get neighbors from environment, (2) move accordingly, (3) update your state in environment
         """
+        self.progress = progress
         robots, rel_pos, dist = self.environment.get_robots(self.id)
         target_pos, vel = self.move(robots, rel_pos, dist, duration)
         self.environment.update_states(self.id, target_pos, vel)
@@ -89,17 +93,12 @@ class Fish():
             self.dorsal = 0
 
     def circling(self, robots, rel_pos):
-        if self.id == 0:
-            move = np.array([1, 0, 0])
+        if self.id == 0 and self.progress >= self.trigger:
+            move = np.array([4, 0, 0])
             return move
 
         if not robots:
-
-            self.pect_l = 0
-            self.pect_r = 0.5
-            self.caudal = 0.1
-
-            move = np.array([self.x, -self.y, 0])
+            move = np.array([4, -1, 0])
             return move
         
         if self.sensing_angle == 0:
@@ -108,19 +107,9 @@ class Fish():
             someone = self.environment.see_circlers(self.id, robots, rel_pos, self.sensing_angle)
 
         if someone:
-
-            self.pect_r = 0
-            self.pect_l = 0.5
-            self.caudal = 0.1
-
-            move = np.array([self.x, self.y, 0])
+            move = np.array([4, 1, 0])
         else:
-
-            self.pect_l = 0
-            self.pect_r = 0.5
-            self.caudal = 0.1
-
-            move = np.array([self.x, -self.y, 0])
+            move = np.array([4, -1, 0])
 
         return move
 
@@ -131,29 +120,22 @@ class Fish():
             target_pos, self_vel = self.dynamics.simulate_move(self.id, duration)
             return (target_pos, self_vel)
 
+        ## for external leader
+        #if self.progress < self.trigger: # ignore that robot
+        #    robots.pop()
+
         # Define your move here
         move = self.circling(robots, rel_pos)
-        #magn = np.linalg.norm(move) # normalize
-        #move /= magn
-        #print(move)
-
-
-        # Global to Robot Transformation
-        if self.id != 0:
-            self.dynamics.update_ctrl(self.dorsal, self.caudal, self.pect_r, self.pect_l)
-
-            target_pos, self_vel = self.dynamics.simulate_move(self.id, duration)
 
         # POINT-MASS MOVE AT CONSTANT SPEED (0.5 BL PER ITERATION = 1 BL / S)
-        if self.id == 0:
-            phi = self.environment.pos[self.id,3]
-            r_T_r = self.environment.rot_robot_to_global(phi)
-            r_move_r = r_T_r @ move
+        phi = self.environment.pos[self.id,3]
+        r_T_r = self.environment.rot_robot_to_global(phi)
+        r_move_r = r_T_r @ move
 
-            pos = self.environment.pos[self.id,:]
-            pos[:3] += r_move_r * self.body_length/10
-            pos[3] += np.arctan2(move[1], move[0])
-            target_pos = pos #np.concatenate((pos, np.array([0])), axis=0)
-            self_vel = np.array([0, 0, 0 ,0])
+        pos = self.environment.pos[self.id,:]
+        pos[:3] += r_move_r * self.body_length/50
+        pos[3] += np.arctan2(move[1], move[0])
+        target_pos = pos #np.concatenate((pos, np.array([0])), axis=0)
+        self_vel = np.array([0, 0, 0 ,0])
 
         return (target_pos, self_vel)
