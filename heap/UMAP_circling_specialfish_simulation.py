@@ -53,7 +53,7 @@ Fish = getattr(importlib.import_module('fishfood.' + experiment_file), 'Fish')
 ## Feel free to loop over multiple simulations with different parameters! ##
 
 # Experimental Parameters
-no_fish = 50
+no_fish = 10
 simulation_time = 300 # [s]
 clock_freq = 2 # [Hz]
 clock_rate = 1/clock_freq
@@ -121,5 +121,5 @@ environment.log_to_file(filename)
 log_meta()
 
 print('Simulation data got saved in ./logfiles/{}_data.txt,\nand corresponding experimental info in ./logfiles/{}_meta.txt.\n -'.format(filename, filename))
-print('Create corresponding animation by running >python animation.py {}'.format(filename))
+print('Create corresponding animation by running >python3 animation.py {}'.format(filename))
 print('#### GOODBYE AND SEE YOU SOON AGAIN ####')

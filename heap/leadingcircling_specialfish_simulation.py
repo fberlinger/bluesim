@@ -53,8 +53,8 @@ Fish = getattr(importlib.import_module('fishfood.' + experiment_file), 'Fish')
 ## Feel free to loop over multiple simulations with different parameters! ##
 
 # Experimental Parameters
-no_fish = 50
-simulation_time = 300 # [s]
+no_fish = 10
+simulation_time = 600 # [s]
 clock_freq = 2 # [Hz]
 clock_rate = 1/clock_freq
 
@@ -66,7 +66,7 @@ n_magnitude=0.1 # visual noise magnitude, [% of distance]
 fish_specs = (v_range, w_blindspot, r_sphere, n_magnitude)
 
 # Standard Tank
-arena_list = [17800, 17800, 11700]
+arena_list = [elem * 2 for elem in [1780, 1780, 1170]]
 arena = np.array(arena_list)
 arena_center = arena / 2.0
 
@@ -121,5 +121,5 @@ environment.log_to_file(filename)
 log_meta()
 
 print('Simulation data got saved in ./logfiles/{}_data.txt,\nand corresponding experimental info in ./logfiles/{}_meta.txt.\n -'.format(filename, filename))
-print('Create corresponding animation by running >python animation.py {}'.format(filename))
+print('Create corresponding animation by running >python3 animation.py {}'.format(filename))
 print('#### GOODBYE AND SEE YOU SOON AGAIN ####')
