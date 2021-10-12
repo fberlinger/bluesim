@@ -1,5 +1,6 @@
 #git ignore files created when running code
 __pycache__/
+.DS_store
 
 #git ignore log files
 logfiles/
