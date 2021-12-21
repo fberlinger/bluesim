@@ -66,9 +66,9 @@ for ii in range(1,fishes):
 v = np.sqrt(x**2 + y**2 + z**2)
 v -= v.min(); v /= v.max();
 d = copy.deepcopy(z); d -= d.min(); d /= d.max();
-#colors = np.array([cm.Blues(k) for k in v])
-colors = np.array([cm.Blues(k) for k in d])
-colors[:, 0, :] = cm.Reds(0.5) # this fish is red
+colors = np.array([cm.Blues(k) for k in v])
+#colors = np.array([cm.Blues(k) for k in d])
+#colors[:, 0, :] = cm.Reds(0.5) # this fish is red
 
 # Create Animation
 fig = ipv.figure()

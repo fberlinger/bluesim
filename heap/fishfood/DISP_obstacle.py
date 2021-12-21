@@ -1,7 +1,3 @@
-# TODO:
-#   (1) include leader with super-attraction
-#   (2) add straight-line component to other fish
-
 """Simulates a Bluebot. Add behavioral code here.
 """
 from math import *

@@ -48,20 +48,37 @@ class Fish():
         n = len(robots)
 
         for robot in robots:
-            r = min(dist[robot], r_const)
-            if robot == 0: # leader
-                if r <= self.r_target:
-                    pass
-                else:
-                    f_lj = -10*gamma*epsilon/r * (a*(self.r_target/r)**a - 2*b*(self.r_target/r)**b)
-                    center += f_lj * rel_pos[robot,:3]
+            # r = min(dist[robot], r_const)           
+
+            
+            # BINARY
+            if dist[robot] > self.r_target:
+                r = 1.2*self.r_target
             else:
+                r = 0.8*self.r_target
+
+            f_lj = -gamma*epsilon/r * (a*(self.r_target/r)**a - 2*b*(self.r_target/r)**b)
+            center += f_lj * rel_pos[robot,:3]
+            '''
+            # TERTIARY
+            if dist[robot] > 1.1*self.r_target:
+                r = 1.2*self.r_target
                 f_lj = -gamma*epsilon/r * (a*(self.r_target/r)**a - 2*b*(self.r_target/r)**b)
                 center += f_lj * rel_pos[robot,:3]
+            elif dist[robot] < 0.9*self.r_target:
+                r = 0.8*self.r_target
+                f_lj = -gamma*epsilon/r * (a*(self.r_target/r)**a - 2*b*(self.r_target/r)**b)
+                center += f_lj * rel_pos[robot,:3]
+            else:
+                n -= 1
+            '''
 
-        center /= n
-        magn = np.linalg.norm(center) # normalize
-        center /= magn # normalize
+        if not n == 0:
+            center /= n
+            magn = np.linalg.norm(center) # normalize
+            center /= magn # normalize
+        else:
+            magn = 0
 
         return (center, magn)
 
@@ -143,11 +160,8 @@ class Fish():
             return (target_pos, self_vel)
 
         # Define your move here
-        if self.id == 0: # leader
-            move = np.array([1, 0, 0]) # swimm straight
-        else:
-            center, magnitude = self.lj_force(robots, rel_pos, dist)
-            move = center
+        center, magnitude = self.lj_force(robots, rel_pos, dist)
+        move = center
 
         '''
         # Global to Robot Transformation
@@ -165,7 +179,7 @@ class Fish():
 
         # POINT-MASS MOVE AT CONSTANT SPEED (0.5 BL PER ITERATION = 1 BL / S)
         pos = self.environment.pos[self.id,:]
-        pos[:3] += move * self.body_length/10
+        pos[:3] += move * self.body_length
         pos[3] += np.arctan2(move[1], move[0])
         target_pos = pos
         self_vel = np.array([0, 0, 0 ,0])
