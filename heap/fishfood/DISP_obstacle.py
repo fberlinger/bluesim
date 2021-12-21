@@ -53,11 +53,11 @@ class Fish():
 
         for robot in robots:
             r = min(dist[robot], r_const)
-            if robot == 0: # leader
-                if r <= self.r_target:
+            if robot == 0: # obstacle
+                if r >= self.r_target:
                     pass
                 else:
-                    f_lj = -10*gamma*epsilon/r * (a*(self.r_target/r)**a - 2*b*(self.r_target/r)**b)
+                    f_lj = -gamma*epsilon/r * (a*(self.r_target/r)**a - 2*b*(self.r_target/r)**b)
                     center += f_lj * rel_pos[robot,:3]
             else:
                 f_lj = -gamma*epsilon/r * (a*(self.r_target/r)**a - 2*b*(self.r_target/r)**b)
@@ -148,10 +148,11 @@ class Fish():
 
         # Define your move here
         if self.id == 0: # leader
-            move = np.array([1, 0, 0]) # swimm straight
+            move = np.array([0, 1.3, 0]) # traversing obstacle
         else:
             center, magnitude = self.lj_force(robots, rel_pos, dist)
             move = center
+            move += np.array([1, 0, 0]) # move to the right
 
         '''
         # Global to Robot Transformation

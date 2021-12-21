@@ -19,6 +19,7 @@ import json
 import numpy as np
 import ipyvolume as ipv
 import matplotlib.cm as cm
+import copy
 import sys
 
 
@@ -64,8 +65,10 @@ for ii in range(1,fishes):
 # Colors
 v = np.sqrt(x**2 + y**2 + z**2)
 v -= v.min(); v /= v.max();
-colors = np.array([cm.Blues(k) for k in v])
-#colors[:, 0, :] = cm.Reds(0.5) # this fish is red
+d = copy.deepcopy(z); d -= d.min(); d /= d.max();
+#colors = np.array([cm.Blues(k) for k in v])
+colors = np.array([cm.Blues(k) for k in d])
+colors[:, 0, :] = cm.Reds(0.5) # this fish is red
 
 # Create Animation
 fig = ipv.figure()
@@ -74,7 +77,7 @@ ipv.ylim(0, arena[1])
 ipv.zlim(0, arena[2])
 ipv.style.use('dark')
 
-quiver = ipv.quiver(x, y, z, np.cos(phi), np.sin(phi), np.zeros((1,len(phi))),size=6, color=colors[:,:,:3])
+quiver = ipv.quiver(x, y, z, np.cos(phi), np.sin(phi), np.zeros((1,len(phi))), size=4, color=colors[:,:,:3], marker="sphere")
 ipv.animation_control(quiver, interval=clock_rate)
 
 ipv.save('./animations/{}_animation.html'.format(filename))

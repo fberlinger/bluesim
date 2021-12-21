@@ -54,10 +54,10 @@ Fish = getattr(importlib.import_module('fishfood.' + experiment_file), 'Fish')
 
 # Experimental Parameters
 #no_fish = 7
-simulation_time = 120 # [s]
+simulation_time = 300 # [s]
 clock_freq = 2 # [Hz]
 clock_rate = 1/clock_freq
-target_dist = 2 # [BL]
+target_dist = 5 # [BL]
 no_fishes = [10] #[5, 10, 15, 20, 25, 30, 35, 40, 45, 50]
 test_runs = 1
 
@@ -69,7 +69,7 @@ n_magnitude=0.1 # visual noise magnitude, [% of distance]
 fish_specs = (v_range, w_blindspot, r_sphere, n_magnitude)
 
 # Standard Tank
-arena_list = [elem * 3 for elem in [1780, 1780, 1170]]
+arena_list = [elem * 5 for elem in [1780, 1780, 1170]]
 arena = np.array(arena_list)
 arena_center = arena / 2.0
 
@@ -83,8 +83,13 @@ for no_fish in no_fishes:
         pos = np.zeros((no_fish, 4))
         vel = np.zeros((no_fish, 4))
         pos[:,:2] = initial_spread * (np.random.rand(no_fish, 2) - 0.5) + arena_center[:2] # x,y
+        pos[1:,0] -= 3000
         pos[:,2] = 10 * np.random.rand(1, no_fish) # z, all fish at same noise-free depth results in LJ lock
         pos[:,3] = 2*math.pi * (np.random.rand(1, no_fish) - 0.5) # phi
+
+        pos[0,0] = arena_center[0]
+        pos[0,1] -= 3000
+        pos[0,2] = 300
 
         # Create Environment, Dynamics, And Heap
         environment = Environment(pos, vel, fish_specs, arena)
